@@ -64,7 +64,7 @@
                 <select id="enhance">
                     <option value="0">None</option>
                     <option value="1">Weak text-shadow</option>
-                    <option value="4">Strong text-shadow</option>
+                    <option value="4" selected>Strong text-shadow</option>
                 </select>
             </label>
             <label>
@@ -97,6 +97,7 @@
 
         const ctx = $("#canvas").getContext("2d");
         const text = "Hello, world!";
+        const defaultHash = Array.from($$("select")).map(e => e.value).join("");
         const schemes = {
             e: { fg: "#eee", bg: "#def", ss: "#000" },
             g: { fg: "pink", bg: "darkblue", ss: "orange" },
@@ -151,7 +152,6 @@
         }
 
         function populateFromHash() {
-            const defaultHash = "d1en";
             var h = location.hash.replace("#", "").substr(0, defaultHash.length);
             h += defaultHash.substr(h.length);
 
@@ -186,13 +186,6 @@
 
             populateFromHash();
         })();
-
-        /*
-        const metrics = ctx.measureText(text);
-        console.log(`canvas text ascent = ${metrics.actualBoundingBoxAscent}, descent = ${metrics.actualBoundingBoxDescent}`);
-        console.log(`DOM text offsetHeight = ${domText.offsetHeight}, offsetTop = ${domText.offsetTop}`);
-        domText.style.top = `${50 - metrics.actualBoundingBoxAscent}px`;
-        */
     </script>
 </body>
 
