@@ -29,9 +29,9 @@
             background-color: white;
         }
 
-        main > * { width: 500px; border: 1px solid black; position: relative; box-sizing: border-box; }
-        canvas#canvas, div#dom-div { height: 100px;  }
-        #dom-text { font: 48px sans-serif; position: absolute; left: 0; top: 0; }
+        main > * { width: 500px; border: 1px solid black; box-sizing: border-box; }
+        canvas#canvas, div#dom-div { height: 100px; position: relative; overflow: clip; }
+        #dom-text { font: 48px sans-serif; position: absolute; }
 
         fieldset { margin-top: 8px; padding: 8px; }
         fieldset label { display: block; padding: 4px 0; }
@@ -62,77 +62,109 @@
             <label>
                 <span>Contrast enhancement</span>
                 <select id="enhance">
+                    <option value="0">None</option>
+                    <option value="1">Weak text-shadow</option>
+                    <option value="4">Strong text-shadow</option>
+                </select>
+            </label>
+            <label>
+                <span>Colour scheme</span>
+                <select id="scheme">
+                    <option value="e">Enhanced (white fill, pale bg, black shadow)</option>
+                    <option value="g">Garish</option>
+                    <option value="x">Stupid (white fill, bg, shadow)</option>
+                </select>
+            </label>
+            <label>
+                <span>Shadow offset</span>
+                <select id="offset">
                     <option value="n">None</option>
-                    <option value="s">Stacked text-shadow</option>
+                    <option value="t">Tasteful (2px)</option>
+                    <option value="x">Silly (50px)</option>
                 </select>
             </label>
         </fieldset>
     </main>
     <script>
         function $(qs) { return document.querySelector(qs); }
+        function $$(qs) { return document.querySelectorAll(qs); }
 
         const elements = {
+            canvas: $("canvas"),
             domDiv: $("#dom-div"),
             domText: $("#dom-text"),
-            canvas: $("#canvas"),
-            renderer: $("#renderer"),
-            enhance: $("#enhance"),
         };
 
-        const defaultHash = "#ds";
-        const ctx = elements.canvas.getContext("2d");
+        const ctx = $("#canvas").getContext("2d");
         const text = "Hello, world!";
-        const fg = "#eee";
-        const bg = "#def";
+        const schemes = {
+            e: { fg: "#eee", bg: "#def", ss: "#000" },
+            g: { fg: "pink", bg: "darkblue", ss: "orange" },
+            x: { fg: "white", bg: "white", ss: "white" }
+        };
+        const offsets = { n: 0, t: 2, x: 50 };
+        const pos = { x: 200, y: 20 };
 
         // Called to repaint the world whenever anything changes; we're not getting incrementally fancy here
         //
         function update() {
 
-            const useCanvas = elements.renderer.value === "c";
+            const useCanvas = $("#renderer").value === "c";
             elements.canvas.style.display = useCanvas ? "block" : "none";
             elements.domDiv.style.display = useCanvas ? "none" : "block";
-            const enhance = elements.enhance.value;
+            const enhance = Number.parseInt($("#enhance").value);
+            const scheme = schemes[$("#scheme").value];
+            const offset = offsets[$("#offset").value];
             
             if (useCanvas) {
-                ctx.fillStyle = bg;
+                ctx.fillStyle = scheme.bg;
                 ctx.fillRect(0, 0, 500, 100);
                 ctx.font = "48px sans-serif";
                 ctx.textBaseline = "top";
-                if (enhance == "s") {
-                    ctx.fillStyle = ctx.shadowColor = "black";
+                if (enhance > 0) {
+                    ctx.fillStyle = ctx.shadowColor = scheme.ss;
                     ctx.shadowBlur = 6.5;
-                    for (let i = 0; i < 4; ++i) {
-                        ctx.fillText(text, 0, 5);
+                    ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
+                    for (let i = 0; i < enhance; ++i) {
+                        ctx.fillText(text, pos.x, pos.y + 5);
                     }
-                    ctx.shadowBlur = 0;
+                    ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
                 }
-                ctx.fillStyle = fg;
-                ctx.fillText(text, 0, 5);
+                ctx.fillStyle = scheme.fg;
+                ctx.fillText(text, pos.x, pos.y + 5);
             } else {
-                elements.domDiv.style.backgroundColor = bg;
-                elements.domDiv.style.color = fg;
-                elements.domText.style.textShadow = (enhance == "s") ? "0 0 7px black, 0 0 7px black, 0 0 7px black, 0 0 7px black" : "none";
+                elements.domDiv.style.backgroundColor = scheme.bg;
+                elements.domDiv.style.color = scheme.fg;
+                elements.domText.style.textShadow = (enhance > 0) 
+                    ? Array(enhance).fill(`${offset}px ${offset}px 7px ${scheme.ss}`).join(", ")
+                    : "none";
+                elements.domText.style.left = pos.x + "px";
+                elements.domText.style.top = pos.y + "px";
                 elements.domText.textContent = text;
             }
 
-            history.replaceState(undefined, undefined, ["#", elements.renderer.value, elements.enhance.value].join(""));
+            // Update the location hash to reflect current settings, allowing bookmarking and nondestructive reload
+            //
+            history.replaceState(undefined, undefined, "#" + Array.from($$("select")).map(e => e.value).join(""));
+
+            $("#offset").disabled = (enhance == 0);
         }
 
         function populateFromHash() {
-            var h = location.hash.substr(0, defaultHash.length);
+            const defaultHash = "d1en";
+            var h = location.hash.replace("#", "").substr(0, defaultHash.length);
             h += defaultHash.substr(h.length);
-            validatedSet("renderer", h[1]);
-            validatedSet("enhance", h[2]);
+
+            Array.from($$("select")).forEach(validatedSet);
             update();
 
-            function validatedSet(id, v) {
-                const el = elements[id];
+            function validatedSet(el, i) {
+                const v = h[i];
                 const legit = Array.from(el.options).map(o => o.value);
                 if (legit.includes(v)) {
                     el.value = v;
                 } else {
-                    alert(`'${v}' is not a valid value for '${id}', allowed values are [${legit}]`);
+                    alert(`'${v}' is not a valid value for '${el.id}', allowed values are [${legit}]`);
                     el.value = legit[0];
                 }
             }
