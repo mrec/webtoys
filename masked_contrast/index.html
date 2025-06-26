@@ -123,11 +123,13 @@
                 ctx.font = "48px sans-serif";
                 ctx.textBaseline = "top";
                 if (enhance > 0) {
-                    ctx.fillStyle = ctx.shadowColor = scheme.ss;
+                    const MULTIPASS_FRINGING_HACK = 1000;
+                    ctx.shadowColor = scheme.ss;
                     ctx.shadowBlur = 6.5;
                     ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
+                    ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
                     for (let i = 0; i < enhance; ++i) {
-                        ctx.fillText(text, pos.x, pos.y + 5);
+                        ctx.fillText(text, pos.x, pos.y + 5 - MULTIPASS_FRINGING_HACK);
                     }
                     ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
                 }
