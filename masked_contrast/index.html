@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Mike Capp">
+    <meta name="description"
+        content="PoC for helping accessibility checkers consider CSS's text-shadow when assessing contrast">
+    <title>masked contrast PoC - webtoys</title>
+    <link rel="icon" href="data:,">
+    <style>
+        html,
+        body,
+        main,
+        canvas,
+        p,
+        fieldset {
+            margin: 0;
+            padding: 0;
+            line-height: normal;
+        }
+
+        main {
+            position: relative;
+            max-width: 50em;
+            margin: 2em auto;
+            font: 10pt sans-serif;
+            background-color: white;
+        }
+
+        main > * { width: 500px; border: 1px solid black; position: relative; box-sizing: border-box; }
+        canvas#canvas, div#dom-div { height: 100px;  }
+        #dom-text { font: 48px sans-serif; position: absolute; left: 0; top: 0; }
+
+        fieldset { margin-top: 8px; padding: 8px; }
+        fieldset label { display: block; padding: 4px 0; }
+        fieldset label > * { display: inline-block; }
+        fieldset label span { width: 150px; }
+        fieldset select { width: 320px; }
+    </style>
+</head>
+
+<body>
+    <main>
+        <noscript>This webtoy uses JavaScript and won't work without it</noscript>
+        <canvas id="canvas" aria-label="text drawn on a non-contrasting background">
+            Your browser does not support the &lt;canvas> element
+        </canvas>
+        <div id="dom-div">
+            <p id="dom-text"></p>
+        </div>
+        <fieldset>
+            <legend>Demo configuration</legend>
+            <label>
+                <span>Draw using</span>
+                <select id="renderer">
+                    <option value="d">DOM text on a &lt;div> with a background-image</option>
+                    <option value="c">Canvas calls for both text and background</option>
+                </select>
+            </label>
+            <label>
+                <span>Contrast enhancement</span>
+                <select id="enhance">
+                    <option value="n">None</option>
+                    <option value="s">Stacked text-shadow</option>
+                </select>
+            </label>
+        </fieldset>
+    </main>
+    <script>
+        function $(qs) { return document.querySelector(qs); }
+
+        const elements = {
+            domDiv: $("#dom-div"),
+            domText: $("#dom-text"),
+            canvas: $("#canvas"),
+            renderer: $("#renderer"),
+            enhance: $("#enhance"),
+        };
+
+        const defaultHash = "#ds";
+        const ctx = elements.canvas.getContext("2d");
+        const text = "Hello, world!";
+        const fg = "#eee";
+        const bg = "#def";
+
+        // Called to repaint the world whenever anything changes; we're not getting incrementally fancy here
+        //
+        function update() {
+
+            const useCanvas = elements.renderer.value === "c";
+            elements.canvas.style.display = useCanvas ? "block" : "none";
+            elements.domDiv.style.display = useCanvas ? "none" : "block";
+            const enhance = elements.enhance.value;
+            
+            if (useCanvas) {
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, 500, 100);
+                ctx.font = "48px sans-serif";
+                ctx.textBaseline = "top";
+                if (enhance == "s") {
+                    ctx.fillStyle = ctx.shadowColor = "black";
+                    ctx.shadowBlur = 6.5;
+                    for (let i = 0; i < 4; ++i) {
+                        ctx.fillText(text, 0, 5);
+                    }
+                    ctx.shadowBlur = 0;
+                }
+                ctx.fillStyle = fg;
+                ctx.fillText(text, 0, 5);
+            } else {
+                elements.domDiv.style.backgroundColor = bg;
+                elements.domDiv.style.color = fg;
+                elements.domText.style.textShadow = (enhance == "s") ? "0 0 7px black, 0 0 7px black, 0 0 7px black, 0 0 7px black" : "none";
+                elements.domText.textContent = text;
+            }
+
+            history.replaceState(undefined, undefined, ["#", elements.renderer.value, elements.enhance.value].join(""));
+        }
+
+        function populateFromHash() {
+            var h = location.hash.substr(0, defaultHash.length);
+            h += defaultHash.substr(h.length);
+            validatedSet("renderer", h[1]);
+            validatedSet("enhance", h[2]);
+            update();
+
+            function validatedSet(id, v) {
+                const el = elements[id];
+                const legit = Array.from(el.options).map(o => o.value);
+                if (legit.includes(v)) {
+                    el.value = v;
+                } else {
+                    alert(`'${v}' is not a valid value for '${id}', allowed values are [${legit}]`);
+                    el.value = legit[0];
+                }
+            }
+        }
+
+        // One-time initialization
+        //
+        (function () {
+
+            // Adjust canvas for high-DPI displays (untested, I don't have one)
+            //
+            const scale = window.devicePixelRatio;
+            canvas.width = canvas.clientWidth * scale;
+            canvas.height = canvas.clientHeight * scale;
+            ctx.scale(scale, scale);
+
+            window.addEventListener("hashchange", populateFromHash)
+            document.querySelectorAll("select").forEach(el => el.addEventListener("click", update));
+
+            populateFromHash();
+        })();
+
+        /*
+        const metrics = ctx.measureText(text);
+        console.log(`canvas text ascent = ${metrics.actualBoundingBoxAscent}, descent = ${metrics.actualBoundingBoxDescent}`);
+        console.log(`DOM text offsetHeight = ${domText.offsetHeight}, offsetTop = ${domText.offsetTop}`);
+        domText.style.top = `${50 - metrics.actualBoundingBoxAscent}px`;
+        */
+    </script>
+</body>
+
+</html>
