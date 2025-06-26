@@ -166,8 +166,9 @@
                 if (legit.includes(v)) {
                     el.value = v;
                 } else {
-                    alert(`'${v}' is not a valid value for '${el.id}', allowed values are [${legit}]`);
-                    el.value = legit[0];
+                    let reset = defaultHash[i];
+                    alert(`'${v}' is not a valid value for '${el.id}'.\nAllowed values are [${legit}].\nResetting to default '${reset}'.`);
+                    el.value = reset;
                 }
             }
         }
