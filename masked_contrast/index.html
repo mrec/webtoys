@@ -200,7 +200,7 @@
             ctx.scale(scale, scale);
 
             window.addEventListener("hashchange", populateFromHash)
-            document.querySelectorAll("select").forEach(el => el.addEventListener("click", update));
+            document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
 
             populateFromHash();
         })();
