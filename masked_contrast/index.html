@@ -64,6 +64,7 @@
                 <select id="enhance">
                     <option value="0">None</option>
                     <option value="1">Weak text-shadow</option>
+                    <option value="2">Medium text-shadow</option>
                     <option value="4" selected>Strong text-shadow</option>
                 </select>
             </label>
@@ -81,6 +82,14 @@
                     <option value="n">None</option>
                     <option value="t">Tasteful (2px)</option>
                     <option value="x">Silly (50px)</option>
+                </select>
+            </label>
+            <label>
+                <span>Shadow blur radius</span>
+                <select id="radius">
+                    <option value="n">None</option>
+                    <option value="r" selected>Reasonable</option>
+                    <option value="x">Extreme</option>
                 </select>
             </label>
         </fieldset>
@@ -104,6 +113,11 @@
             x: { fg: "white", bg: "white", ss: "white" }
         };
         const offsets = { n: 0, t: 2, x: 50 };
+        const radii = {
+            n: { d: 0 , c: 0 },
+            r: { d: 7, c: 6 },
+            x: { d: 35, c: 38 },
+        };
         const pos = { x: 200, y: 20 };
 
         // Called to repaint the world whenever anything changes; we're not getting incrementally fancy here
@@ -116,16 +130,17 @@
             const enhance = Number.parseInt($("#enhance").value);
             const scheme = schemes[$("#scheme").value];
             const offset = offsets[$("#offset").value];
+            const radius = radii[$("#radius").value];
             
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
                 ctx.fillRect(0, 0, 500, 100);
                 ctx.font = "48px sans-serif";
                 ctx.textBaseline = "top";
-                if (enhance > 0) {
+                if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
                     ctx.shadowColor = scheme.ss;
-                    ctx.shadowBlur = 6.5;
+                    ctx.shadowBlur = radius.c;
                     ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
                     ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
                     for (let i = 0; i < enhance; ++i) {
@@ -139,7 +154,7 @@
                 elements.domDiv.style.backgroundColor = scheme.bg;
                 elements.domDiv.style.color = scheme.fg;
                 elements.domText.style.textShadow = (enhance > 0) 
-                    ? Array(enhance).fill(`${offset}px ${offset}px 7px ${scheme.ss}`).join(", ")
+                    ? Array(enhance).fill(`${offset}px ${offset}px ${radius.d}px ${scheme.ss}`).join(", ")
                     : "none";
                 elements.domText.style.left = pos.x + "px";
                 elements.domText.style.top = pos.y + "px";
