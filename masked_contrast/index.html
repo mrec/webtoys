@@ -93,6 +93,10 @@
                 </select>
             </label>
         </fieldset>
+        <fieldset id="analytic">
+            <legend>Analytic approach</legend>
+            <pre></pre>
+        </fieldset>
     </main>
     <script>
         function $(qs) { return document.querySelector(qs); }
@@ -102,15 +106,16 @@
             canvas: $("canvas"),
             domDiv: $("#dom-div"),
             domText: $("#dom-text"),
+            analytic: $("#analytic"),
         };
 
         const ctx = $("#canvas").getContext("2d");
         const text = "Hello, world!";
         const defaultHash = Array.from($$("select")).map(e => e.value).join("");
-        const schemes = {
+        const schemes = { // don't use named colours here, it messes with the analytic approach
             e: { fg: "#eee", bg: "#def", ss: "#000" },
-            g: { fg: "pink", bg: "darkblue", ss: "orange" },
-            x: { fg: "white", bg: "white", ss: "white" }
+            g: { fg: "#fd8", bg: "#8df", ss: "#dfd" },
+            x: { fg: "#fff", bg: "#fff", ss: "#fff" },
         };
         const offsets = { n: 0, t: 2, x: 50 };
         const radii = {
@@ -127,11 +132,14 @@
             const useCanvas = $("#renderer").value === "c";
             elements.canvas.style.display = useCanvas ? "block" : "none";
             elements.domDiv.style.display = useCanvas ? "none" : "block";
+            elements.analytic.style.display = useCanvas ? "none" : "block";
             const enhance = Number.parseInt($("#enhance").value);
             const scheme = schemes[$("#scheme").value];
             const offset = offsets[$("#offset").value];
             const radius = radii[$("#radius").value];
             
+            // Redraw ALL the things!
+            //
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
                 ctx.fillRect(0, 0, 500, 100);
@@ -152,13 +160,15 @@
                 ctx.fillText(text, pos.x, pos.y + 5);
             } else {
                 elements.domDiv.style.backgroundColor = scheme.bg;
-                elements.domDiv.style.color = scheme.fg;
+                elements.domText.style.color = scheme.fg;
                 elements.domText.style.textShadow = (enhance > 0) 
                     ? Array(enhance).fill(`${offset}px ${offset}px ${radius.d}px ${scheme.ss}`).join(", ")
                     : "none";
                 elements.domText.style.left = pos.x + "px";
                 elements.domText.style.top = pos.y + "px";
                 elements.domText.textContent = text;
+
+                analyzeTextShadowContrast();
             }
 
             // Update the location hash to reflect current settings, allowing bookmarking and nondestructive reload
@@ -166,6 +176,49 @@
             history.replaceState(undefined, undefined, "#" + Array.from($$("select")).map(e => e.value).join(""));
 
             $("#offset").disabled = (enhance == 0);
+        }
+
+        function analyzeTextShadowContrast() {
+            const lines = [];
+
+            const bg = $("#dom-div").style.backgroundColor;
+            const bgLum = rgbToLuminance(numbers(bg));
+            lines.push(`background colour: ${bg}\n  luminance: ${bgLum}`);
+
+            const style = $("#dom-text").style;
+            const fg = style.color;
+            const fgLum = rgbToLuminance(numbers(fg));
+            lines.push(`text colour: ${fg}\n  luminance: ${fgLum}`);
+            lines.push(`text/background contrast: ${contrast(bgLum, fgLum)}`)
+            
+            const shadows = [...style.textShadow.match(/rgb.*?px(?=,|$)/g)];
+            for (const shadow of shadows) {
+                let [r, g, b, x, y, blur] = [...numbers(shadow)];
+                let baseLum = rgbToLuminance([r, g, b]);
+                lines.push(`shadow: ${shadow}\n  base luminance: ${baseLum}`);
+            }
+            $("#analytic pre").textContent = lines.join("\n");
+
+            function numbers(s) {
+                return s.match(/[0-9]+/g).map(Number);
+            }
+
+            function rgbToLuminance(rgb) { // https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+                const [r, g, b] = rgb.map(linearize);
+                return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
+                function linearize(c) {
+                    c /= 255;
+                    return (c <= 0.04045) 
+                        ? (c / 12.92) 
+                        : Math.pow(((c + 0.055) / 1.055), 2.4);
+                }
+            }
+
+            function contrast(lum1, lum2) { // https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
+                const lighter = Math.max(lum1, lum2);
+                const darker = Math.min(lum1, lum2);
+                return (lighter + 0.05) / (darker + 0.05)
+            }
         }
 
         function populateFromHash() {
