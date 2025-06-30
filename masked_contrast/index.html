@@ -31,7 +31,7 @@
 
         main > * { width: 500px; border: 1px solid black; box-sizing: border-box; }
         canvas#canvas, div#dom-div { height: 100px; position: relative; overflow: clip; }
-        #dom-text { font: 48px sans-serif; position: absolute; }
+        #dom-text { position: absolute; }
 
         fieldset { margin-top: 8px; padding: 8px; }
         fieldset label { display: block; padding: 4px 0; }
@@ -88,6 +88,7 @@
                 <span>Shadow blur radius</span>
                 <select id="radius">
                     <option value="n">None</option>
+                    <option value="t">Tiny</option>
                     <option value="r" selected>Reasonable</option>
                     <option value="x">Extreme</option>
                 </select>
@@ -120,10 +121,12 @@
         const offsets = { n: 0, t: 2, x: 50 };
         const radii = {
             n: { d: 0 , c: 0 },
+            t: { d: 2, c: 2 },
             r: { d: 7, c: 6 },
             x: { d: 35, c: 38 },
         };
         const pos = { x: 200, y: 20 };
+        const fontSize = 48;
 
         // Called to repaint the world whenever anything changes; we're not getting incrementally fancy here
         //
@@ -143,7 +146,7 @@
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
                 ctx.fillRect(0, 0, 500, 100);
-                ctx.font = "48px sans-serif";
+                ctx.font = fontSize + "px sans-serif";
                 ctx.textBaseline = "top";
                 if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
@@ -159,7 +162,9 @@
                 ctx.fillStyle = scheme.fg;
                 ctx.fillText(text, pos.x, pos.y + 5);
             } else {
+
                 elements.domDiv.style.backgroundColor = scheme.bg;
+                elements.domText.style.font = fontSize + "px sans-serif";
                 elements.domText.style.color = scheme.fg;
                 elements.domText.style.textShadow = (enhance > 0) 
                     ? Array(enhance).fill(`${offset}px ${offset}px ${radius.d}px ${scheme.ss}`).join(", ")
@@ -176,34 +181,75 @@
             history.replaceState(undefined, undefined, "#" + Array.from($$("select")).map(e => e.value).join(""));
 
             $("#offset").disabled = (enhance == 0);
+            $("#radius").disabled = (enhance == 0);
         }
 
         function analyzeTextShadowContrast() {
             const lines = [];
 
             const bg = $("#dom-div").style.backgroundColor;
-            const bgLum = rgbToLuminance(numbers(bg));
+            const bgLum = luminance(numbers(bg));
             lines.push(`background colour: ${bg}\n  luminance: ${bgLum}`);
 
             const style = $("#dom-text").style;
             const fg = style.color;
-            const fgLum = rgbToLuminance(numbers(fg));
+            const fgLum = luminance(numbers(fg));
             lines.push(`text colour: ${fg}\n  luminance: ${fgLum}`);
             lines.push(`text/background contrast: ${contrast(bgLum, fgLum)}`)
             
-            const shadows = [...style.textShadow.match(/rgb.*?px(?=,|$)/g)];
-            for (const shadow of shadows) {
-                let [r, g, b, x, y, blur] = [...numbers(shadow)];
-                let baseLum = rgbToLuminance([r, g, b]);
-                lines.push(`shadow: ${shadow}\n  base luminance: ${baseLum}`);
+            if (style.textShadow !== "none") {
+                const shadows = [...style.textShadow.match(/rgb.*?px(?=,|$)/g)];
+                const stack = shadows.length;
+                const shadow = shadows[0]; // assuming homogenous stack for simplicity
+                const [r, g, b, x, y, blur] = numbers(shadow);
+                const shadowLum = luminance([r, g, b]);
+                const baseContrast = contrast(fgLum, shadowLum);
+
+                // The calcs above are uncontroversial; from here on down we start to get opinionated.
+
+                // Estimate width of each stroke of a glyph (usually but not necessarily vertical), e.g. the 
+                // width of an 'L' vertical or the height of an 'H' crossbar. This is not the same as the 
+                // "stroke" used in canvas or SVG rendering, which is an outline width. Divisor is a pure
+                // guess based on eyeballing some examples. We use the stemWidth to scale offset and blur.
+                //
+                const stemWidth = numbers(style.fontSize)[0] / 10;
+
+                // With no offset, we'll get the best contrast halo with a blur of ~(1.4 * stemWidth). 
+                // This maximizes the number of glyph-covered pixels contributing to the Gaussian kernel, 
+                // without diluting too much beyond that. You might think (1 + stemWidth) would be better, but
+                // remember the kernel is going to be sampling at offsets angled to the adjacent stem too.
+                //
+                // We might want to give a higher weighting to balanced offsets here, since e.g. a y-only
+                // offset shadow isn't going to do much for the readability of a lowercase sans-serif 'l'.
+                // Not doing that for now though; I suspect single-axis offsets aren't too common.
+                //
+                const offsetNormalized = Math.max(Math.abs(x), Math.abs(y)) / stemWidth;
+                const offsetIdeal = 0.5, offsetTolerance = 0.3;
+
+                // With no blur, we'll get the best contrast with an offset of at least half the stemWidth. 
+                // Offsets >= stemWidth will become detached from their glyphs and should be punished; even
+                // if the shadow is more readable than the original, there's no guarantee it's even onscreen.
+                // A zero offset is as useful as a chocolate teapot and should be *severely* punished.
+                //
+                const blurNormalized = blur / stemWidth;
+                const blurIdeal = 1.4, blurTolerance = 0.7;
+
+                const offsetExposure = Math.exp(-(((offsetNormalized - offsetIdeal) / offsetTolerance) ** 2));
+                const blurExposure = Math.exp(-(((blurNormalized - blurIdeal) / blurTolerance) ** 2));
+                const combinedExposure = (offsetExposure + blurExposure + (offsetExposure * blurExposure)) / 3;
+
+
+                lines.push(`shadow: ${shadow}\n  base luminance: ${shadowLum}`);
+                lines.push(`  offsetExposure: ${offsetExposure}\n  blurExposure: ${blurExposure}\n  combinedExposure: ${combinedExposure}`);
             }
+
             $("#analytic pre").textContent = lines.join("\n");
 
             function numbers(s) {
                 return s.match(/[0-9]+/g).map(Number);
             }
 
-            function rgbToLuminance(rgb) { // https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+            function luminance(rgb) { // https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
                 const [r, g, b] = rgb.map(linearize);
                 return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
                 function linearize(c) {
