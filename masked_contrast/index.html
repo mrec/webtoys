@@ -81,7 +81,8 @@
                 <select id="offset">
                     <option value="n">None</option>
                     <option value="t">Tasteful (2px)</option>
-                    <option value="x">Silly (50px)</option>
+                    <option value="x">Excessive (5px)</option>
+                    <option value="z">Silly (50px)</option>
                 </select>
             </label>
             <label>
@@ -89,6 +90,7 @@
                 <select id="radius">
                     <option value="n">None</option>
                     <option value="t">Tiny</option>
+                    <option value="s">Small</option>
                     <option value="r" selected>Reasonable</option>
                     <option value="x">Extreme</option>
                 </select>
@@ -118,10 +120,11 @@
             g: { fg: "#fd8", bg: "#8df", ss: "#dfd" },
             x: { fg: "#fff", bg: "#fff", ss: "#fff" },
         };
-        const offsets = { n: 0, t: 2, x: 50 };
+        const offsets = { n: 0, t: 2, x: 5, z: 50 };
         const radii = {
             n: { d: 0 , c: 0 },
-            t: { d: 2, c: 2 },
+            t: { d: 1, c: 1 },
+            s: { d: 2, c: 2 },
             r: { d: 7, c: 6 },
             x: { d: 35, c: 38 },
         };
@@ -214,33 +217,44 @@
                 //
                 const stemWidth = numbers(style.fontSize)[0] / 10;
 
-                // With no offset, we'll get the best contrast halo with a blur of ~(1.4 * stemWidth). 
-                // This maximizes the number of glyph-covered pixels contributing to the Gaussian kernel, 
-                // without diluting too much beyond that. You might think (1 + stemWidth) would be better, but
-                // remember the kernel is going to be sampling at offsets angled to the adjacent stem too.
-                //
-                // We might want to give a higher weighting to balanced offsets here, since e.g. a y-only
-                // offset shadow isn't going to do much for the readability of a lowercase sans-serif 'l'.
-                // Not doing that for now though; I suspect single-axis offsets aren't too common.
-                //
-                const offsetNormalized = Math.max(Math.abs(x), Math.abs(y)) / stemWidth;
-                const offsetIdeal = 0.5, offsetTolerance = 0.3;
-
                 // With no blur, we'll get the best contrast with an offset of at least half the stemWidth. 
                 // Offsets >= stemWidth will become detached from their glyphs and should be punished; even
                 // if the shadow is more readable than the original, there's no guarantee it's even onscreen.
                 // A zero offset is as useful as a chocolate teapot and should be *severely* punished.
                 //
-                const blurNormalized = blur / stemWidth;
-                const blurIdeal = 1.4, blurTolerance = 0.7;
+                // We might want to give a higher weighting to balanced offsets here, since e.g. a y-only
+                // offset shadow isn't going to do much for the readability of a lowercase sans-serif 'l'.
+                // Not doing that for now though; I suspect single-axis offsets aren't too common.
+                //
+                const offset = Math.max(Math.abs(x), Math.abs(y));
+                const offsetExposure = opinionatedExposure(stemWidth, offset, 0.6);
+                //const offsetNormalized = Math.max(Math.abs(x), Math.abs(y)) / stemWidth;
+                //const offsetIdeal = 0.5, offsetTolerance = 0.3;
 
-                const offsetExposure = Math.exp(-(((offsetNormalized - offsetIdeal) / offsetTolerance) ** 2));
-                const blurExposure = Math.exp(-(((blurNormalized - blurIdeal) / blurTolerance) ** 2));
+                // With no offset, we'll get the best contrast halo with a blur of ~(1.4 * stemWidth). 
+                // This maximizes the number of glyph-covered pixels contributing to the Gaussian kernel, 
+                // without diluting too much beyond that. You might think (1 + stemWidth) would be better, but
+                // remember the kernel is going to be sampling at offsets angled to the adjacent stem too.
+                //
+                const blurExposure = opinionatedExposure(stemWidth, blur, 1.4);
+
+                // Combining blur and offset generally gives the best results, but either by itself can help
+                //
                 const combinedExposure = (offsetExposure + blurExposure + (offsetExposure * blurExposure)) / 3;
 
+                // Roughly estimate how much blurring has reduced the alpha of our shadows. We'll often need to
+                // stack shadows to counteract this dilution.
+                //
+                const dilutedAlpha = alphaDilution(stemWidth, blur);
 
                 lines.push(`shadow: ${shadow}\n  base luminance: ${shadowLum}`);
                 lines.push(`  offsetExposure: ${offsetExposure}\n  blurExposure: ${blurExposure}\n  combinedExposure: ${combinedExposure}`);
+
+                // iterated
+                const bgShineThrough = (1 - dilutedAlpha) ** stack;
+                const shadowedBgLum = shadowLum * (1 - bgShineThrough) + bgLum * bgShineThrough;
+                lines.push(`  shadowed background luminance: ${shadowedBgLum}`);
+                lines.push(`  text/shadowed background contrast: ${contrast(fgLum, shadowedBgLum)}`);
             }
 
             $("#analytic pre").textContent = lines.join("\n");
@@ -264,6 +278,19 @@
                 const lighter = Math.max(lum1, lum2);
                 const darker = Math.min(lum1, lum2);
                 return (lighter + 0.05) / (darker + 0.05)
+            }
+
+            function opinionatedExposure(stemWidth, raw, ideal) {
+                let norm = raw / stemWidth;
+                let exposure = norm / ideal;
+                if (exposure > 1) exposure /= (exposure ** 4); // tuneable, obviously
+                return exposure;
+            }
+
+            function alphaDilution(stemWidth, blur) { // in the range 0..1, very crude
+                const srcArea = stemWidth ** 2;
+                const blurArea = (stemWidth + 2 * blur) ** 2;
+                return srcArea / blurArea;
             }
         }
 
