@@ -10,25 +10,8 @@
     <title>masked contrast PoC - webtoys</title>
     <link rel="icon" href="data:,">
     <style>
-        html,
-        body,
-        main,
-        canvas,
-        p,
-        fieldset {
-            margin: 0;
-            padding: 0;
-            line-height: normal;
-        }
-
-        main {
-            position: relative;
-            max-width: 50em;
-            margin: 2em auto;
-            font: 10pt sans-serif;
-            background-color: white;
-        }
-
+        html, body, main, canvas, p, fieldset, pre { margin: 0; padding: 0; line-height: normal; }
+        main { position: relative; max-width: 50em; margin: 2em auto; font: 10pt sans-serif; background-color: white; }
         main > * { width: 500px; border: 1px solid black; box-sizing: border-box; }
         canvas#canvas, div#dom-div { height: 100px; position: relative; overflow: clip; }
         #dom-text { position: absolute; }
@@ -97,7 +80,7 @@
             </label>
         </fieldset>
         <fieldset id="analytic">
-            <legend>Analytic approach</legend>
+            <legend>Analytic contrast</legend>
             <pre></pre>
         </fieldset>
     </main>
@@ -197,8 +180,9 @@
             const style = $("#dom-text").style;
             const fg = style.color;
             const fgLum = luminance(numbers(fg));
+            const baseContrast = contrast(bgLum, fgLum);
             lines.push(`text colour: ${fg}\n  luminance: ${fgLum}`);
-            lines.push(`text/background contrast: ${contrast(bgLum, fgLum)}`)
+            lines.push(`text/background contrast: ${baseContrast}`)
             
             if (style.textShadow !== "none") {
                 const shadows = [...style.textShadow.match(/rgb.*?px(?=,|$)/g)];
@@ -206,7 +190,6 @@
                 const shadow = shadows[0]; // assuming homogenous stack for simplicity
                 const [r, g, b, x, y, blur] = numbers(shadow);
                 const shadowLum = luminance([r, g, b]);
-                const baseContrast = contrast(fgLum, shadowLum);
 
                 // The calcs above are uncontroversial; from here on down we start to get opinionated.
 
@@ -258,18 +241,18 @@
                 // an overall impact estimate for our shadows.
                 //
                 const idealContrast = contrast(fgLum, shadowedBgLum);
-                const exposedContrast = idealContrast * combinedExposure;
+                const finalContrast = idealContrast * combinedExposure + baseContrast * (1 - combinedExposure);
 
-                lines.push(`shadow: ${shadow}\n  base luminance: ${shadowLum}`);
+                lines.push(`shadow: ${shadow}\n  stack: ${stack}\n  base luminance: ${shadowLum}`);
                 lines.push(`  dilutedAlpha (per shadow): ${dilutedAlpha}`);
-                lines.push(`  offsetExposure: ${offsetExposure}\n  blurExposure: ${blurExposure}\n  combinedExposure: ${combinedExposure}`);
+                lines.push(`  exposure:\n    offset: ${offsetExposure}\n    blur: ${blurExposure}\n    combined: ${combinedExposure}`);
                 lines.push(`  bgShineThrough: ${bgShineThrough}`);
                 lines.push(`  shadowed background luminance: ${shadowedBgLum}`);
                 lines.push(`  ideal shadow contrast: ${idealContrast}`);
-                lines.push(`  exposed shadow contrast: ${exposedContrast}`);
+                lines.push(`<b>final contrast: ${finalContrast}</b>`);
             }
 
-            $("#analytic pre").textContent = lines.join("\n");
+            $("#analytic pre").innerHTML = lines.join("\n");
 
             function numbers(s) {
                 return s.match(/[0-9]+/g).map(Number);
