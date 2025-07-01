@@ -227,16 +227,14 @@
                 // Not doing that for now though; I suspect single-axis offsets aren't too common.
                 //
                 const offset = Math.max(Math.abs(x), Math.abs(y));
-                const offsetExposure = opinionatedExposure(stemWidth, offset, 0.6);
-                //const offsetNormalized = Math.max(Math.abs(x), Math.abs(y)) / stemWidth;
-                //const offsetIdeal = 0.5, offsetTolerance = 0.3;
+                const offsetExposure = opinionatedExposure(stemWidth, offset, 0.6, 4);
 
                 // With no offset, we'll get the best contrast halo with a blur of ~(1.4 * stemWidth). 
                 // This maximizes the number of glyph-covered pixels contributing to the Gaussian kernel, 
                 // without diluting too much beyond that. You might think (1 + stemWidth) would be better, but
                 // remember the kernel is going to be sampling at offsets angled to the adjacent stem too.
                 //
-                const blurExposure = opinionatedExposure(stemWidth, blur, 1.4);
+                const blurExposure = opinionatedExposure(stemWidth, blur, 1.4, 1.5);
 
                 // Combining blur and offset generally gives the best results, but either by itself can help.
                 // Blur is weighted heavier since offset by itself can only provide contrast on one glyph edge.
@@ -289,10 +287,10 @@
                 return (lighter + 0.05) / (darker + 0.05)
             }
 
-            function opinionatedExposure(stemWidth, raw, ideal) {
+            function opinionatedExposure(stemWidth, raw, ideal, excessExponent) {
                 let norm = raw / stemWidth;
                 let exposure = norm / ideal;
-                if (exposure > 1) exposure /= (exposure ** 4); // tuneable, obviously
+                if (exposure > 1) exposure /= (exposure ** excessExponent); // tuneable, obviously
                 return exposure;
             }
 
