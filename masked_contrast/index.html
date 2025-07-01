@@ -239,6 +239,9 @@
                 // Combining blur and offset generally gives the best results, but either by itself can help.
                 // Blur is weighted heavier since offset by itself can only provide contrast on one glyph edge.
                 //
+                // We might want to make the impact of offset inversely proportional to blur radius,
+                // up to a point. Offset is essential with zero blur and largely irrelevant with high blur.
+                //
                 const combinedExposure = (0.2 * offsetExposure) + (0.6 * blurExposure) + (0.2 * offsetExposure * blurExposure);
 
                 // Roughly estimate how much blurring has reduced peak alpha of our shadows. We'll often need to
@@ -251,7 +254,9 @@
                 const bgShineThrough = (1 - dilutedAlpha) ** stack;
                 const shadowedBgLum = shadowLum * (1 - bgShineThrough) + bgLum * bgShineThrough;
 
-                // Idea
+                // Calculate the ideal foreground/shadow contrast, and scale that by our exposure metric to produce
+                // an overall impact estimate for our shadows.
+                //
                 const idealContrast = contrast(fgLum, shadowedBgLum);
                 const exposedContrast = idealContrast * combinedExposure;
 
@@ -284,7 +289,7 @@
             function contrast(lum1, lum2) { // https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
                 const lighter = Math.max(lum1, lum2);
                 const darker = Math.min(lum1, lum2);
-                return (lighter + 0.05) / (darker + 0.05)
+                return (lighter + 0.05) / (darker + 0.05); // avoid possible divide by zero
             }
 
             function opinionatedExposure(stemWidth, raw, ideal, excessExponent) {
