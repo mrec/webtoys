@@ -83,6 +83,10 @@
             <legend>Analytic contrast</legend>
             <pre></pre>
         </fieldset>
+        <fieldset id="image-based">
+            <legend>Image-based contrast</legend>
+            <button type="button" id="show-box">Show Box</button>
+        </fieldset>
     </main>
     <script>
         function $(qs) { return document.querySelector(qs); }
@@ -93,6 +97,7 @@
             domDiv: $("#dom-div"),
             domText: $("#dom-text"),
             analytic: $("#analytic"),
+            imageBased: $("#image-based"),
         };
 
         const ctx = $("#canvas").getContext("2d");
@@ -116,12 +121,13 @@
 
         // Called to repaint the world whenever anything changes; we're not getting incrementally fancy here
         //
-        function update() {
+        function update(e, optOverlay) {
 
             const useCanvas = $("#renderer").value === "c";
             elements.canvas.style.display = useCanvas ? "block" : "none";
             elements.domDiv.style.display = useCanvas ? "none" : "block";
             elements.analytic.style.display = useCanvas ? "none" : "block";
+            elements.imageBased.style.display = useCanvas ? "block" : "none";
             const enhance = Number.parseInt($("#enhance").value);
             const scheme = schemes[$("#scheme").value];
             const offset = offsets[$("#offset").value];
@@ -147,6 +153,8 @@
                 }
                 ctx.fillStyle = scheme.fg;
                 ctx.fillText(text, pos.x, pos.y + 5);
+
+                calculateImageBasedContrast(optOverlay);
             } else {
 
                 elements.domDiv.style.backgroundColor = scheme.bg;
@@ -159,7 +167,7 @@
                 elements.domText.style.top = pos.y + "px";
                 elements.domText.textContent = text;
 
-                analyzeTextShadowContrast();
+                calculateAnalyticContrast();
             }
 
             // Update the location hash to reflect current settings, allowing bookmarking and nondestructive reload
@@ -170,7 +178,7 @@
             $("#radius").disabled = (enhance == 0);
         }
 
-        function analyzeTextShadowContrast() {
+        function calculateAnalyticContrast() {
             const lines = [];
 
             const bg = $("#dom-div").style.backgroundColor;
@@ -289,6 +297,19 @@
             }
         }
 
+        function calculateImageBasedContrast(optOverlay) {
+            const bcrDiv = elements.domDiv.getBoundingClientRect();
+            const bcrText = elements.domText.getBoundingClientRect();
+            const metrics = ctx.measureText(text);
+            const [x, y, w, h] = [pos.x, pos.y, metrics.width, metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent];
+            const pixels = ctx.getImageData(x, y, w, h);
+
+            if (optOverlay === "box") {
+                ctx.strokeStyle = "fuchsia";
+                ctx.strokeRect(x, y, w, h);
+            }
+        }
+
         function populateFromHash() {
             var h = location.hash.replace("#", "").substr(0, defaultHash.length);
             h += defaultHash.substr(h.length);
@@ -311,7 +332,7 @@
 
         // One-time initialization
         //
-        (function () {
+        (function init() {
 
             // Adjust canvas for high-DPI displays (untested, I don't have one)
             //
@@ -320,8 +341,11 @@
             canvas.height = canvas.clientHeight * scale;
             ctx.scale(scale, scale);
 
-            window.addEventListener("hashchange", populateFromHash)
+            window.addEventListener("hashchange", populateFromHash);
             document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
+            $("button#show-box").addEventListener("mousedown", e => update(e, "box"));
+            $("button#show-box").addEventListener("mouseup", update);
+            $("button#show-box").addEventListener("mouseout", update);
 
             populateFromHash();
         })();
