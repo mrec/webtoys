@@ -222,10 +222,12 @@
                 // Combining blur and offset generally gives the best results, but either by itself can help.
                 // Blur is weighted heavier since offset by itself can only provide contrast on one glyph edge.
                 //
-                // We might want to make the impact of offset inversely proportional to blur radius,
-                // up to a point. Offset is essential with zero blur and largely irrelevant with high blur.
+                // We might want to make the impact of offset inversely proportional to blur radius, up to a point.
+                // Offset is essential with zero blur and largely irrelevant with high blur. In practice, though,
+                // the lack of alpha dilution with zero blur kind of does this, and adding explicit weightings
+                // on top of that seemed to overcorrect.
                 //
-                const combinedExposure = (0.2 * offsetExposure) + (0.6 * blurExposure) + (0.2 * offsetExposure * blurExposure);
+                const combinedExposure = (0.2 * offsetExposure) + (0.7 * blurExposure) + (0.1 * offsetExposure * blurExposure);
 
                 // Roughly estimate how much blurring has reduced peak alpha of our shadows. We'll often need to
                 // stack shadows to counteract this dilution.
@@ -278,7 +280,7 @@
             function opinionatedExposure(stemWidth, raw, ideal, excessExponent) {
                 let norm = raw / stemWidth;
                 let exposure = norm / ideal;
-                if (exposure > 1) exposure /= (exposure ** excessExponent); // tuneable, obviously
+                if (exposure > 1) exposure /= (exposure ** excessExponent);
                 return exposure;
             }
 
