@@ -21,6 +21,9 @@
         fieldset label > * { display: inline-block; }
         fieldset label span { width: 150px; }
         fieldset select { width: 320px; }
+
+        span.swatch { display: inline-block; border: 1px solid black; width: 2em; height: 1em; margin-right: 1em; vertical-align: baseline; }
+        fieldset#image-based div { margin: 8px 0; }
     </style>
 </head>
 
@@ -85,7 +88,10 @@
         </fieldset>
         <fieldset id="image-based">
             <legend>Image-based contrast</legend>
-            <button type="button" id="show-box">Show Box</button>
+            <button type="button" id="show-box" title="Show the pixel box we'll consider as background">Show Box</button>
+            <button type="button" id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide Text</button>
+            <div><span id="best-swatch" class="swatch">&nbsp;</span>Best contrast: <span id="best-contrast"></span></div>
+            <div><span id="worst-swatch" class="swatch">&nbsp;</span>Worst contrast: <span id="worst-contrast"></span></div>
         </fieldset>
     </main>
     <script>
@@ -103,7 +109,7 @@
         const ctx = $("#canvas").getContext("2d");
         const text = "Hello, world!";
         const defaultHash = Array.from($$("select")).map(e => e.value).join("");
-        const schemes = { // don't use named colours here, it messes with the analytic approach
+        const schemes = { // don't use named colours here, it complicates parsing
             e: { fg: "#eee", bg: "#def", ss: "#000" },
             g: { fg: "#fd8", bg: "#8df", ss: "#dfd" },
             x: { fg: "#fff", bg: "#fff", ss: "#fff" },
@@ -119,9 +125,8 @@
         const pos = { x: 200, y: 20 };
         const fontSize = 48;
 
-        // Called to repaint the world whenever anything changes; we're not getting incrementally fancy here
-        //
-        function update(e, optOverlay) {
+        /** Called to repaint the world whenever anything changes; we're not getting incrementally fancy here */
+        function update(e, opt) {
 
             const useCanvas = $("#renderer").value === "c";
             elements.canvas.style.display = useCanvas ? "block" : "none";
@@ -151,10 +156,24 @@
                     }
                     ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
                 }
-                ctx.fillStyle = scheme.fg;
-                ctx.fillText(text, pos.x, pos.y + 5);
 
-                calculateImageBasedContrast(optOverlay);
+                const bcrDiv = elements.domDiv.getBoundingClientRect();
+                const bcrText = elements.domText.getBoundingClientRect();
+                const metrics = ctx.measureText(text);
+                const [x, y, w, h] = [pos.x, pos.y, metrics.width, metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent];
+                const pixelData = ctx.getImageData(x, y, w, h).data;
+
+                if (opt === "box") {
+                    ctx.strokeStyle = "fuchsia";
+                    ctx.strokeRect(x, y, w, h);
+                }
+                
+                if (opt !== "hide") {
+                    ctx.fillStyle = scheme.fg;
+                    ctx.fillText(text, pos.x, pos.y + 5);
+                }
+
+                calculateImageBasedContrast(scheme.fg, pixelData);
             } else {
 
                 elements.domDiv.style.backgroundColor = scheme.bg;
@@ -264,27 +283,6 @@
 
             $("#analytic pre").innerHTML = lines.join("\n");
 
-            function numbers(s) {
-                return s.match(/[0-9]+/g).map(Number);
-            }
-
-            function luminance(rgb) { // https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
-                const [r, g, b] = rgb.map(linearize);
-                return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
-                function linearize(c) {
-                    c /= 255;
-                    return (c <= 0.04045) 
-                        ? (c / 12.92) 
-                        : Math.pow(((c + 0.055) / 1.055), 2.4);
-                }
-            }
-
-            function contrast(lum1, lum2) { // https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
-                const lighter = Math.max(lum1, lum2);
-                const darker = Math.min(lum1, lum2);
-                return (lighter + 0.05) / (darker + 0.05); // avoid possible divide by zero
-            }
-
             function opinionatedExposure(stemWidth, raw, ideal, excessExponent) {
                 let norm = raw / stemWidth;
                 let exposure = norm / ideal;
@@ -297,17 +295,63 @@
             }
         }
 
-        function calculateImageBasedContrast(optOverlay) {
-            const bcrDiv = elements.domDiv.getBoundingClientRect();
-            const bcrText = elements.domText.getBoundingClientRect();
-            const metrics = ctx.measureText(text);
-            const [x, y, w, h] = [pos.x, pos.y, metrics.width, metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent];
-            const pixels = ctx.getImageData(x, y, w, h);
+        function calculateImageBasedContrast(fgColor, pixelData) {
+            const fgLum = luminance(hexColor(fgColor));
+            let cBest = 1, cWorst = 21;
+            let rgbBest = [], rgbWorst = [];
+            for (let i = 0; i < pixelData.length; i += 4) {
+                let r = pixelData[i];
+                let g = pixelData[i + 1];
+                let b = pixelData[i + 2];
 
-            if (optOverlay === "box") {
-                ctx.strokeStyle = "fuchsia";
-                ctx.strokeRect(x, y, w, h);
+                let bgLum = luminance([r, g, b]);
+                let c = contrast(fgLum, bgLum);
+                if (c > cBest) {
+                    cBest = c;
+                    rgbBest = [r, g, b];
+                }
+                if (c < cWorst) {
+                    cWorst = c;
+                    rgbWorst = [r, g, b];
+                }
             }
+            $("#best-swatch").style.backgroundColor = `rgb(${rgbBest[0]}, ${rgbBest[1]}, ${rgbBest[1]})`;
+            $("#worst-swatch").style.backgroundColor = `rgb(${rgbWorst[0]}, ${rgbWorst[1]}, ${rgbWorst[1]})`;
+            $("#best-contrast").textContent = cBest;
+            $("#worst-contrast").textContent = cWorst;
+        }
+
+        /** Extracts all integer values from `s` as an array */
+        function numbers(s) {
+            return s.match(/[0-9]+/g).map(Number);
+        }
+
+        /** Parses `hex` as an `#nnn` hex value, returning [r, g, b] */
+        function hexColor(hex) {
+            return [parseHexDigit(hex[1]), parseHexDigit(hex[2]), parseHexDigit(hex[3])];
+            function parseHexDigit(d) {
+                let n = parseInt(d, 16);
+                return (n << 4) + n;
+            }
+        }
+
+        /** Luminance of an `[r, g, b]` uint8-valued array, in the range 0..=1 */
+        function luminance(rgb) { // https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+            const [r, g, b] = rgb.map(linearize);
+            return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
+            function linearize(c) {
+                c /= 255;
+                return (c <= 0.04045) 
+                    ? (c / 12.92) 
+                    : Math.pow(((c + 0.055) / 1.055), 2.4);
+            }
+        }
+
+        /** Contrast between two luminance values, in the range 1 (worst) to 21 (best) */
+        function contrast(lum1, lum2) { // https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
+            const lighter = Math.max(lum1, lum2);
+            const darker = Math.min(lum1, lum2);
+            return (lighter + 0.05) / (darker + 0.05); // avoid possible divide by zero
         }
 
         function populateFromHash() {
@@ -330,8 +374,7 @@
             }
         }
 
-        // One-time initialization
-        //
+        /** One-time initialization */
         (function init() {
 
             // Adjust canvas for high-DPI displays (untested, I don't have one)
@@ -343,11 +386,16 @@
 
             window.addEventListener("hashchange", populateFromHash);
             document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
-            $("button#show-box").addEventListener("mousedown", e => update(e, "box"));
-            $("button#show-box").addEventListener("mouseup", update);
-            $("button#show-box").addEventListener("mouseout", update);
+            setUpButton($("button#show-box"), "box");
+            setUpButton($("button#hide-text"), "hide");
 
             populateFromHash();
+
+            function setUpButton(el, opt) {
+                el.addEventListener("mousedown", e => update(e, opt));
+                el.addEventListener("mouseup", update);
+                el.addEventListener("mouseout", update);
+            }
         })();
     </script>
 </body>
