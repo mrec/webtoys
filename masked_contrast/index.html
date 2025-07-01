@@ -238,23 +238,32 @@
                 //
                 const blurExposure = opinionatedExposure(stemWidth, blur, 1.4);
 
-                // Combining blur and offset generally gives the best results, but either by itself can help
+                // Combining blur and offset generally gives the best results, but either by itself can help.
+                // Blur is weighted heavier since offset by itself can only provide contrast on one glyph edge.
                 //
-                const combinedExposure = (offsetExposure + blurExposure + (offsetExposure * blurExposure)) / 3;
+                const combinedExposure = (0.2 * offsetExposure) + (0.6 * blurExposure) + (0.2 * offsetExposure * blurExposure);
 
-                // Roughly estimate how much blurring has reduced the alpha of our shadows. We'll often need to
+                // Roughly estimate how much blurring has reduced peak alpha of our shadows. We'll often need to
                 // stack shadows to counteract this dilution.
                 //
-                const dilutedAlpha = alphaDilution(stemWidth, blur);
+                const dilutedAlpha = fittedAlpha(blur);
 
-                lines.push(`shadow: ${shadow}\n  base luminance: ${shadowLum}`);
-                lines.push(`  offsetExposure: ${offsetExposure}\n  blurExposure: ${blurExposure}\n  combinedExposure: ${combinedExposure}`);
-
-                // iterated
+                // Luminance of background with all stacked shadows composited onto it
+                //
                 const bgShineThrough = (1 - dilutedAlpha) ** stack;
                 const shadowedBgLum = shadowLum * (1 - bgShineThrough) + bgLum * bgShineThrough;
+
+                // Idea
+                const idealContrast = contrast(fgLum, shadowedBgLum);
+                const exposedContrast = idealContrast * combinedExposure;
+
+                lines.push(`shadow: ${shadow}\n  base luminance: ${shadowLum}`);
+                lines.push(`  dilutedAlpha (per shadow): ${dilutedAlpha}`);
+                lines.push(`  offsetExposure: ${offsetExposure}\n  blurExposure: ${blurExposure}\n  combinedExposure: ${combinedExposure}`);
+                lines.push(`  bgShineThrough: ${bgShineThrough}`);
                 lines.push(`  shadowed background luminance: ${shadowedBgLum}`);
-                lines.push(`  text/shadowed background contrast: ${contrast(fgLum, shadowedBgLum)}`);
+                lines.push(`  ideal shadow contrast: ${idealContrast}`);
+                lines.push(`  exposed shadow contrast: ${exposedContrast}`);
             }
 
             $("#analytic pre").textContent = lines.join("\n");
@@ -287,10 +296,8 @@
                 return exposure;
             }
 
-            function alphaDilution(stemWidth, blur) { // in the range 0..1, very crude
-                const srcArea = stemWidth ** 2;
-                const blurArea = (stemWidth + 2 * blur) ** 2;
-                return srcArea / blurArea;
+            function fittedAlpha(blur) { // curve by ChatGPT from empirical tests at 48px font
+                return 1 / (1 + 9.035 * (blur / fontSize) ** 2);
             }
         }
 
