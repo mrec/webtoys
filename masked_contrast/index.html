@@ -43,14 +43,14 @@
             <legend>Demo configuration</legend>
             <label>
                 <span>Draw using</span>
-                <select id="renderer">
+                <select id="renderer" disabled>
                     <option value="d">DOM text on a &lt;div> with a background-image</option>
                     <option value="c">Canvas calls for both text and background</option>
                 </select>
             </label>
             <label>
                 <span>Contrast enhancement</span>
-                <select id="enhance">
+                <select id="enhance" disabled>
                     <option value="0">None</option>
                     <option value="1">Weak text-shadow</option>
                     <option value="2">Medium text-shadow</option>
@@ -59,7 +59,7 @@
             </label>
             <label>
                 <span>Colour scheme</span>
-                <select id="scheme">
+                <select id="scheme" disabled>
                     <option value="e">Enhanced (white fill, pale bg, black shadow)</option>
                     <option value="g">Garish</option>
                     <option value="x">Stupid (white fill, bg, shadow)</option>
@@ -67,7 +67,7 @@
             </label>
             <label>
                 <span>Shadow offset</span>
-                <select id="offset">
+                <select id="offset" disabled>
                     <option value="n">None</option>
                     <option value="t">Tasteful (2px)</option>
                     <option value="x">Excessive (5px)</option>
@@ -76,7 +76,7 @@
             </label>
             <label>
                 <span>Shadow blur radius</span>
-                <select id="radius">
+                <select id="radius" disabled>
                     <option value="n">None</option>
                     <option value="t">Tiny</option>
                     <option value="s">Small</option>
@@ -91,9 +91,9 @@
         </fieldset>
         <fieldset id="image-based">
             <legend>Image-based contrast</legend>
-            <button type="button" id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide Text</button>
-            <button type="button" id="show-box" title="Show the pixel box we'll consider as background">Show Box</button>
-            <button type="button" id="show-mask" title="Show the dilation mask">Show Mask</button>
+            <button type="button" disabled id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide Text</button>
+            <button type="button" disabled id="show-box" title="Show the pixel box we'll consider as background">Show Box</button>
+            <button type="button" disabled id="show-mask" title="Show the dilation mask">Show Mask</button>
             <div><span id="best-swatch-box" class="swatch">&nbsp;</span>Best contrast (box): <span id="best-contrast-box"></span></div>
             <div><span id="worst-swatch-box" class="swatch">&nbsp;</span>Worst contrast (box): <span id="worst-contrast-box"></span></div>
         </fieldset>
@@ -110,8 +110,23 @@
             imageBased: $("#image-based"),
         };
 
-        const ctx = $("#canvas").getContext("2d");
         const text = "Hello, world!";
+        const pos = { x: 200, y: 64 };
+        const fontSize = 48;
+        const ctx = $("#canvas").getContext("2d");
+        ctx.font = `normal ${fontSize}px/1 sans-serif`;
+        ctx.textBaseline = "alphabetic";
+        const box = (function() {
+            const metrics = window.metrics = ctx.measureText(text);
+            const EXTRA = 3; // allow for outline mask
+            return {
+                x: Math.round(pos.x - metrics.actualBoundingBoxLeft) - EXTRA,
+                y: Math.round(pos.y - metrics.actualBoundingBoxAscent) - EXTRA,
+                w: Math.round(metrics.width) + EXTRA * 2,
+                h: Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + EXTRA * 2
+            };
+        })();
+
         const defaultHash = Array.from($$("select")).map(e => e.value).join("");
         const schemes = { // don't use named colours here, it complicates parsing
             e: { fg: "#eee", bg: "#def", ss: "#000" },
@@ -126,10 +141,11 @@
             r: { d: 7, c: 6 },
             x: { d: 35, c: 38 },
         };
-        const pos = { x: 200, y: 64 };
-        const fontSize = 48;
 
         const maskCanvas = new OffscreenCanvas(500, 100);
+        var maskBytes; // initialized asynchronously by init()
+
+        init();
 
         /** Called to repaint the world whenever anything changes; we're not getting incrementally fancy here */
         function update(e, opt) {
@@ -149,8 +165,7 @@
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
                 ctx.fillRect(0, 0, 500, 100);
-                ctx.font = `normal ${fontSize}px/1 sans-serif`;
-                ctx.textBaseline = "alphabetic";
+
                 if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
                     ctx.shadowColor = scheme.ss;
@@ -163,16 +178,11 @@
                     ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
                 }
 
-                const metrics = window.metrics = ctx.measureText(text);
-                const x = Math.round(pos.x - metrics.actualBoundingBoxLeft);
-                const y = Math.round(pos.y - metrics.actualBoundingBoxAscent);
-                const w = Math.round(metrics.width);
-                const h = Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent);
-                const pixels = ctx.getImageData(x, y, w, h);
+                const pixels = ctx.getImageData(box.x, box.y, box.w, box.h); // before any overlays
 
                 if (opt === "box") {
                     ctx.strokeStyle = "fuchsia";
-                    ctx.strokeRect(x - 0.5, y - 0.5, w, h);
+                    ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w, box.h);
                 } else if (opt === "mask") {
                     ctx.drawImage(maskCanvas, 0, 0);
                 }
@@ -384,7 +394,7 @@
         }
 
         /** One-time initialization */
-        (function init() {
+        function init() {
 
             // Adjust canvas for high-DPI displays (untested, I don't have one)
             //
@@ -395,38 +405,41 @@
             ctx.scale(scale, scale);
             */
 
-            createMask();
+            makeSvgImgPromise().then(img => {
+                const mctx = maskCanvas.getContext("2d");
+                mctx.drawImage(img, 0, 0);
+                const maskPixels = mctx.getImageData(box.x, box.y, box.w, box.h).data;
+                maskBytes = new Uint8ClampedArray(maskPixels.length / 4);
+                for (let i = 0; i < maskBytes.length; ++i) {
+                    maskBytes[i] = maskPixels[i * 4 + 3]; // just take alpha as a boolean equivalent
+                }
 
-            window.addEventListener("hashchange", populateFromHash);
-            document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
-            setUpButton($("button#hide-text"), "hide");
-            setUpButton($("button#show-box"), "box");
-            setUpButton($("button#show-mask"), "mask");
+                window.addEventListener("hashchange", populateFromHash);
+                document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
+                setUpButton($("button#hide-text"), "hide");
+                setUpButton($("button#show-box"), "box");
+                setUpButton($("button#show-mask"), "mask");
 
-            populateFromHash();
+                $$("select, button").forEach(el => el.disabled = false);
 
-            function setUpButton(el, opt) {
-                el.addEventListener("mousedown", e => update(e, opt));
-                el.addEventListener("mouseup", update);
-                el.addEventListener("mouseout", update);
-            }
-        })();
+                populateFromHash();
+            });
 
-        function createMask() {
-            const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="500" height="100" viewBox="0 0 500 100" preserveAspectRatio="none">
-                <defs>
-                    <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
-                    <feComponentTransfer in="SourceAlpha" result="alpha">
-                        <feFuncA type="discrete" tableValues="0 1"/>
-                    </feComponentTransfer>
-                    <feMorphology in="alpha" operator="dilate" radius="2" result="dilated"/>
-                    <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
-                    <feFlood flood-color="fuchsia" result="flood"/>
-                    <feComposite in="flood" in2="border" operator="in"/>
-                    </filter>
-                </defs>
-                <text x="${pos.x}" y="${pos.y}"
+            function makeSvgImgPromise() {
+                const svg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="500" height="100" viewBox="0 0 500 100" preserveAspectRatio="none">
+                    <defs>
+                        <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
+                        <feComponentTransfer in="SourceAlpha" result="alpha">
+                            <feFuncA type="discrete" tableValues="0 1"/>
+                        </feComponentTransfer>
+                        <feMorphology in="alpha" operator="dilate" radius="2" result="dilated"/>
+                        <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
+                        <feFlood flood-color="fuchsia" result="flood"/>
+                        <feComposite in="flood" in2="border" operator="in"/>
+                        </filter>
+                    </defs>
+                    <text x="${pos.x}" y="${pos.y}"
                         dominant-baseline="alphabetic"
                         text-anchor="start"
                         font-family="sans-serif"
@@ -434,16 +447,22 @@
                         line-height="1"
                         filter="url(#dilate)"
                         fill="black">${text}</text>
-                </svg>`;
-            const blob = new Blob([svg], { type: "image/svg+xml" });
-            const url = URL.createObjectURL(blob);
-            const img = new Image(500, 100);
-            img.onload = () => {
-                const mctx = maskCanvas.getContext("2d");
-                mctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
-            };
-            img.src = url;
+                    </svg>`;
+                const blob = new Blob([svg], { type: "image/svg+xml" });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                return new Promise((resolve, reject) => {
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = url;
+                });
+            }
+
+            function setUpButton(el, opt) {
+                el.addEventListener("mousedown", e => update(e, opt));
+                el.addEventListener("mouseup", update);
+                el.addEventListener("mouseout", update);
+            }
         }
     </script>
 </body>
