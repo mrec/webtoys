@@ -23,8 +23,8 @@
         fieldset label span { width: 150px; }
         fieldset select { width: 320px; }
 
-        span.swatch { display: inline-block; border: 1px solid black; width: 2em; margin-right: 1em; }
-        fieldset#image-based div { margin: 8px 0; display: flex; justify-content: space-between; gap: 2em; flex-wrap: wrap; width: 100%; }
+        fieldset#image-based pre { margin-top: 1em; }
+        fieldset#image-based span { display: inline-block; border: 1px solid black; width: 2em; margin-right: 8px; box-sizing: border-box; }
     </style>
 </head>
 
@@ -94,20 +94,7 @@
             <button type="button" disabled id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide Text</button>
             <button type="button" disabled id="show-box" title="Show the pixel box we'll consider as background">Show Box</button>
             <button type="button" disabled id="show-mask" title="Show the dilation mask">Show Mask</button>
-            <div>
-                <span id="best-swatch-box" class="swatch">&nbsp;</span>
-                <span id="best-contrast-box"></span>
-                <span>best « [box pixels] » worst</span>
-                <span id="worst-contrast-box"></span>
-                <span id="worst-swatch-box" class="swatch">&nbsp;</span>
-            </div>
-            <div>
-                <span id="best-swatch-mask" class="swatch">&nbsp;</span>
-                <span id="best-contrast-mask"></span>
-                <span>best « [mask pixels] » worst</span>
-                <span id="worst-contrast-mask"></span>
-                <span id="worst-swatch-mask" class="swatch">&nbsp;</span>
-            </div>
+            <pre></pre>
         </fieldset>
     </main>
     <script>
@@ -330,41 +317,75 @@
             const fgLum = luminance(hexColor(fgColor));
             let cBest = 1, cMaskedBest = 1, cWorst = 21, cMaskedWorst = 21;
             let rgbBest = [], rgbMaskedBest = [], rgbWorst = [], rgbMaskedWorst = [];
+            let boxCount = pixelData.length / 4, inMaskCount = 0;
+            let passCount = 0, maskedPassCount = 0; // contrast >= 4.5, WCAG general criterion
+            let largeCount = 0, maskedLargeCount = 0; // contrast >= 3, criterion for text >= 18pt
+            let lumBoxSum = 0, cBoxSum = 0, lumMaskedSum = 0, cMaskedSum = 0;
             for (let i = 0; i < pixelData.length; i += 4) {
                 let inMask = maskBytes[i / 4] === 255;
+                
                 let rgb = [pixelData[i], pixelData[i + 1], pixelData[i + 2]];
                 let bgLum = luminance(rgb);
                 let c = contrast(fgLum, bgLum);
-                if (c > cMaskedBest) {
-                    if (inMask) {
+                let pass = (c >= 4.5);
+                let largePass = (c > 3);
+
+                if (inMask) {
+                    ++inMaskCount;
+                    lumMaskedSum += bgLum;
+                    cMaskedSum += c;
+                    if (pass) ++maskedPassCount;
+                    if (largePass) ++maskedLargeCount;
+                    if (c > cMaskedBest) {
                         cMaskedBest = c;
                         rgbMaskedBest = rgb;
                     }
+                    if (c < cMaskedWorst) {
+                        cMaskedWorst = c;
+                        rgbMaskedWorst = rgb;
+                    }
+                }
+
+                if (pass) ++passCount;
+                if (largePass) ++largeCount;
+                lumBoxSum += bgLum;
+                cBoxSum += c;
+                if (c > cMaskedBest) {
                     if (c > cBest) {
                         cBest = c;
                         rgbBest = rgb;
                     }
                 }
                 if (c < cMaskedWorst) {
-                    if (inMask) {
-                        cMaskedWorst = c;
-                        rgbMaskedWorst = rgb;
-                    }
                     if (c < cWorst) {
                         cWorst = c;
                         rgbWorst = rgb;
                     }
                 }
             }
-            $("#best-swatch-box").style.backgroundColor = `rgb(${rgbBest[0]}, ${rgbBest[1]}, ${rgbBest[1]})`;
-            $("#worst-swatch-box").style.backgroundColor = `rgb(${rgbWorst[0]}, ${rgbWorst[1]}, ${rgbWorst[1]})`;
-            $("#best-contrast-box").textContent = cBest.toFixed(3);
-            $("#worst-contrast-box").textContent = cWorst.toFixed(3);
 
-            $("#best-swatch-mask").style.backgroundColor = `rgb(${rgbMaskedBest[0]}, ${rgbMaskedBest[1]}, ${rgbMaskedBest[1]})`;
-            $("#worst-swatch-mask").style.backgroundColor = `rgb(${rgbMaskedWorst[0]}, ${rgbMaskedWorst[1]}, ${rgbMaskedWorst[1]})`;
-            $("#best-contrast-mask").textContent = cMaskedBest.toFixed(3);
-            $("#worst-contrast-mask").textContent = cMaskedWorst.toFixed(3);
+            const lines = [];
+            lines.push(
+                "Whole box:",
+                `  ${swatch(rgbBest)} best contrast: ${cBest.toFixed(3)}`,
+                `  ${swatch(rgbWorst)} worst contrast: ${cWorst.toFixed(3)}`,
+                `  WCAG 4.5 pixel pass rate: ${((passCount / boxCount) * 100).toFixed(2)}%`,
+                `  WCAG 3.0 pixel pass rate: ${((largeCount / boxCount) * 100).toFixed(2)}%`,
+                `  mean luminance: ${(lumBoxSum / boxCount).toFixed(2)}`,
+                `  mean contrast: ${(cBoxSum / boxCount).toFixed(2)}`,
+                "Outline mask:",
+                `  ${swatch(rgbMaskedBest)} best contrast: ${cMaskedBest.toFixed(3)}`,
+                `  ${swatch(rgbMaskedWorst)} worst contrast: ${cMaskedWorst.toFixed(3)}`,
+                `  WCAG 4.5 pixel pass rate: ${((maskedPassCount / inMaskCount) * 100).toFixed(2)}%`,
+                `  WCAG 3.0 pixel pass rate: ${((maskedLargeCount / inMaskCount) * 100).toFixed(2)}%`,
+                `  mean luminance: ${(lumMaskedSum / inMaskCount).toFixed(2)}`,
+                `  mean contrast: ${(cMaskedSum / inMaskCount).toFixed(2)}`,
+            );
+            $("#image-based pre").innerHTML = lines.join("\n");
+
+            function swatch(rgb) {
+                return `<span style="background-color:rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})">&nbsp;</span>`;
+            }
         }
 
         /** Extracts all integer values from `s` as an array */
