@@ -163,15 +163,16 @@
                     ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
                 }
 
-                const bcrDiv = elements.domDiv.getBoundingClientRect();
-                const bcrText = elements.domText.getBoundingClientRect();
-                const metrics = ctx.measureText(text);
-                const [x, y, w, h] = [pos.x, pos.y, metrics.width, metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent];
+                const metrics = window.metrics = ctx.measureText(text);
+                const x = Math.round(pos.x - metrics.actualBoundingBoxLeft);
+                const y = Math.round(pos.y - metrics.actualBoundingBoxAscent);
+                const w = Math.round(metrics.width);
+                const h = Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent);
                 const pixels = ctx.getImageData(x, y, w, h);
 
                 if (opt === "box") {
                     ctx.strokeStyle = "fuchsia";
-                    ctx.strokeRect(x, y, w, h);
+                    ctx.strokeRect(x - 0.5, y - 0.5, w, h);
                 } else if (opt === "mask") {
                     ctx.drawImage(maskCanvas, 0, 0);
                 }
