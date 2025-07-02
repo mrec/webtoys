@@ -24,7 +24,7 @@
         fieldset select { width: 320px; }
 
         span.swatch { display: inline-block; border: 1px solid black; width: 2em; margin-right: 1em; }
-        fieldset#image-based div { margin: 8px 0; }
+        fieldset#image-based div { margin: 8px 0; display: flex; justify-content: space-between; gap: 2em; flex-wrap: wrap; width: 100%; }
     </style>
 </head>
 
@@ -94,8 +94,20 @@
             <button type="button" disabled id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide Text</button>
             <button type="button" disabled id="show-box" title="Show the pixel box we'll consider as background">Show Box</button>
             <button type="button" disabled id="show-mask" title="Show the dilation mask">Show Mask</button>
-            <div><span id="best-swatch-box" class="swatch">&nbsp;</span>Best contrast (box): <span id="best-contrast-box"></span></div>
-            <div><span id="worst-swatch-box" class="swatch">&nbsp;</span>Worst contrast (box): <span id="worst-contrast-box"></span></div>
+            <div>
+                <span id="best-swatch-box" class="swatch">&nbsp;</span>
+                <span id="best-contrast-box"></span>
+                <span>best « [box pixels] » worst</span>
+                <span id="worst-contrast-box"></span>
+                <span id="worst-swatch-box" class="swatch">&nbsp;</span>
+            </div>
+            <div>
+                <span id="best-swatch-mask" class="swatch">&nbsp;</span>
+                <span id="best-contrast-mask"></span>
+                <span>best « [mask pixels] » worst</span>
+                <span id="worst-contrast-mask"></span>
+                <span id="worst-swatch-mask" class="swatch">&nbsp;</span>
+            </div>
         </fieldset>
     </main>
     <script>
@@ -316,28 +328,43 @@
 
         function calculateImageBasedContrast(fgColor, pixelData) {
             const fgLum = luminance(hexColor(fgColor));
-            let cBest = 1, cWorst = 21;
-            let rgbBest = [], rgbWorst = [];
+            let cBest = 1, cMaskedBest = 1, cWorst = 21, cMaskedWorst = 21;
+            let rgbBest = [], rgbMaskedBest = [], rgbWorst = [], rgbMaskedWorst = [];
             for (let i = 0; i < pixelData.length; i += 4) {
-                let r = pixelData[i];
-                let g = pixelData[i + 1];
-                let b = pixelData[i + 2];
-
-                let bgLum = luminance([r, g, b]);
+                let inMask = maskBytes[i / 4] === 255;
+                let rgb = [pixelData[i], pixelData[i + 1], pixelData[i + 2]];
+                let bgLum = luminance(rgb);
                 let c = contrast(fgLum, bgLum);
-                if (c > cBest) {
-                    cBest = c;
-                    rgbBest = [r, g, b];
+                if (c > cMaskedBest) {
+                    if (inMask) {
+                        cMaskedBest = c;
+                        rgbMaskedBest = rgb;
+                    }
+                    if (c > cBest) {
+                        cBest = c;
+                        rgbBest = rgb;
+                    }
                 }
-                if (c < cWorst) {
-                    cWorst = c;
-                    rgbWorst = [r, g, b];
+                if (c < cMaskedWorst) {
+                    if (inMask) {
+                        cMaskedWorst = c;
+                        rgbMaskedWorst = rgb;
+                    }
+                    if (c < cWorst) {
+                        cWorst = c;
+                        rgbWorst = rgb;
+                    }
                 }
             }
             $("#best-swatch-box").style.backgroundColor = `rgb(${rgbBest[0]}, ${rgbBest[1]}, ${rgbBest[1]})`;
             $("#worst-swatch-box").style.backgroundColor = `rgb(${rgbWorst[0]}, ${rgbWorst[1]}, ${rgbWorst[1]})`;
             $("#best-contrast-box").textContent = cBest.toFixed(3);
             $("#worst-contrast-box").textContent = cWorst.toFixed(3);
+
+            $("#best-swatch-mask").style.backgroundColor = `rgb(${rgbMaskedBest[0]}, ${rgbMaskedBest[1]}, ${rgbMaskedBest[1]})`;
+            $("#worst-swatch-mask").style.backgroundColor = `rgb(${rgbMaskedWorst[0]}, ${rgbMaskedWorst[1]}, ${rgbMaskedWorst[1]})`;
+            $("#best-contrast-mask").textContent = cMaskedBest.toFixed(3);
+            $("#worst-contrast-mask").textContent = cMaskedWorst.toFixed(3);
         }
 
         /** Extracts all integer values from `s` as an array */
