@@ -15,7 +15,7 @@
         #gfx, fieldset { width: 502px; border: 1px solid black; box-sizing: border-box; }
         #gfx { position: relative; }
         canvas#canvas, div#dom-div { width: 500px; height: 100px; position: relative; overflow: clip; }
-#mask-canvas { position: absolute; display: block; }
+#mask-canvas { position: absolute; left: 0; top: 0; display: block; width: 500px; height: 100px; }
         #dom-text { position: absolute; }
 
         fieldset { margin-top: 8px; padding: 8px; }
@@ -128,7 +128,7 @@
             r: { d: 7, c: 6 },
             x: { d: 35, c: 38 },
         };
-        const pos = { x: 200, y: 20 };
+        const pos = { x: 200, y: 64 };
         const fontSize = 48;
 
         /** Called to repaint the world whenever anything changes; we're not getting incrementally fancy here */
@@ -149,8 +149,8 @@
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
                 ctx.fillRect(0, 0, 500, 100);
-                ctx.font = fontSize + "px sans-serif";
-                ctx.textBaseline = "top";
+                ctx.font = `normal ${fontSize}px/1 sans-serif`;
+                ctx.textBaseline = "alphabetic";
                 if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
                     ctx.shadowColor = scheme.ss;
@@ -170,13 +170,13 @@
                 const pixels = ctx.getImageData(x, y, w, h);
 
                 const maskCanvas = $("#mask-canvas"); //new OffscreenCanvas(w, h);
-                maskCanvas.width = w;
-                maskCanvas.height = h;
-                maskCanvas.style.left = x + "px";
-                maskCanvas.style.top = y + "px";
+                //maskCanvas.width = w;
+                //maskCanvas.height = h;
+                //maskCanvas.style.left = x + "px";
+                //maskCanvas.style.top = y + "px";
                 const mctx = maskCanvas.getContext("2d");
                 const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 100" preserveAspectRatio="none">
   <defs>
     <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
       <feComponentTransfer in="SourceAlpha" result="alpha">
@@ -188,11 +188,12 @@
       <feComposite in="flood" in2="border" operator="in"/>
     </filter>
   </defs>
-  <text x="0" y="10"
-        dominant-baseline="hanging"
+  <text x="${pos.x}" y="${pos.y}"
+        dominant-baseline="alphabetic"
         text-anchor="start"
         font-family="sans-serif"
         font-size="${fontSize}px"
+        line-height="1"
         filter="url(#dilate)"
         fill="black">${text}</text>
 </svg>`;
@@ -214,7 +215,7 @@ img.src = url;
                 
                 if (opt !== "hide") {
                     ctx.fillStyle = scheme.fg;
-                    ctx.fillText(text, pos.x, pos.y + 5);
+                    ctx.fillText(text, pos.x, pos.y);
                 }
 
                 calculateImageBasedContrast(scheme.fg, pixels.data);
