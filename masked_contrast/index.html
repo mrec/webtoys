@@ -112,17 +112,17 @@
         const text = "Hello, world!";
         const pos = { x: 200, y: 64 };
         const fontSize = 48;
+        const maskWidth = 2;
         const ctx = $("#canvas").getContext("2d");
         ctx.font = `normal ${fontSize}px/1 sans-serif`;
         ctx.textBaseline = "alphabetic";
         const box = (function() {
             const metrics = window.metrics = ctx.measureText(text);
-            const EXTRA = 3; // allow for outline mask
             return {
-                x: Math.round(pos.x - metrics.actualBoundingBoxLeft) - EXTRA,
-                y: Math.round(pos.y - metrics.actualBoundingBoxAscent) - EXTRA,
-                w: Math.round(metrics.width) + EXTRA * 2,
-                h: Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + EXTRA * 2
+                x: Math.round(pos.x - metrics.actualBoundingBoxLeft) - maskWidth,
+                y: Math.round(pos.y - metrics.actualBoundingBoxAscent) - maskWidth,
+                w: Math.round(metrics.width) + maskWidth * 2,
+                h: Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + maskWidth * 2
             };
         })();
 
@@ -478,13 +478,13 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="500" height="100" viewBox="0 0 500 100" preserveAspectRatio="none">
                     <defs>
                         <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
-                        <feComponentTransfer in="SourceAlpha" result="alpha">
-                            <feFuncA type="discrete" tableValues="0 1"/>
-                        </feComponentTransfer>
-                        <feMorphology in="alpha" operator="dilate" radius="2" result="dilated"/>
-                        <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
-                        <feFlood flood-color="fuchsia" result="flood"/>
-                        <feComposite in="flood" in2="border" operator="in"/>
+                            <feComponentTransfer in="SourceAlpha" result="alpha">
+                                <feFuncA type="discrete" tableValues="0 1"/>
+                            </feComponentTransfer>
+                            <feMorphology in="alpha" operator="dilate" radius="${maskWidth}" result="dilated"/>
+                            <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
+                            <feFlood flood-color="fuchsia" result="flood"/>
+                            <feComposite in="flood" in2="border" operator="in"/>
                         </filter>
                     </defs>
                     <text x="${pos.x}" y="${pos.y}"
