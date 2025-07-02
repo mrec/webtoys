@@ -15,8 +15,7 @@
         #gfx, fieldset { width: 502px; border: 1px solid black; box-sizing: border-box; }
         #gfx { position: relative; }
         #canvas, #dom-div { width: 500px; height: 100px; position: relative; overflow: clip; }
-#mask-canvas { position: absolute; left: 0; top: 0; display: block; width: 500px; height: 100px; }
-        #dom-text { position: absolute; line-height: 1; transform: translateY(-0.85em) /* approx baseline offset from top */; }
+        #dom-text { position: absolute; line-height: 1; transform: translateY(-0.92em) /* approx baseline offset from top */; }
 
         fieldset { margin-top: 8px; padding: 8px; }
         fieldset label { display: block; padding: 4px 0; }
@@ -33,10 +32,9 @@
     <main>
         <noscript>This webtoy uses JavaScript and won't work without it</noscript>
         <div id="gfx">
-            <canvas id="canvas" aria-label="text drawn on a non-contrasting background">
+            <canvas id="canvas" width="500" height="100" aria-label="text drawn on a non-contrasting background">
                 Your browser does not support the &lt;canvas> element
             </canvas>
-            <canvas id="mask-canvas"></canvas>
             <div id="dom-div">
                 <p id="dom-text"></p>
             </div>
@@ -131,6 +129,8 @@
         const pos = { x: 200, y: 64 };
         const fontSize = 48;
 
+        const maskCanvas = new OffscreenCanvas(500, 100);
+
         /** Called to repaint the world whenever anything changes; we're not getting incrementally fancy here */
         function update(e, opt) {
 
@@ -169,48 +169,11 @@
                 const [x, y, w, h] = [pos.x, pos.y, metrics.width, metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent];
                 const pixels = ctx.getImageData(x, y, w, h);
 
-                const maskCanvas = $("#mask-canvas"); //new OffscreenCanvas(w, h);
-                //maskCanvas.width = w;
-                //maskCanvas.height = h;
-                //maskCanvas.style.left = x + "px";
-                //maskCanvas.style.top = y + "px";
-                const mctx = maskCanvas.getContext("2d");
-                const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 100" preserveAspectRatio="none">
-  <defs>
-    <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
-      <feComponentTransfer in="SourceAlpha" result="alpha">
-        <feFuncA type="discrete" tableValues="0 1"/>
-      </feComponentTransfer>
-      <feMorphology in="alpha" operator="dilate" radius="2" result="dilated"/>
-      <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
-      <feFlood flood-color="fuchsia" result="flood"/>
-      <feComposite in="flood" in2="border" operator="in"/>
-    </filter>
-  </defs>
-  <text x="${pos.x}" y="${pos.y}"
-        dominant-baseline="alphabetic"
-        text-anchor="start"
-        font-family="sans-serif"
-        font-size="${fontSize}px"
-        line-height="1"
-        filter="url(#dilate)"
-        fill="black">${text}</text>
-</svg>`;
-const svgBlob = new Blob([svg], { type: "image/svg+xml" });
-const url = URL.createObjectURL(svgBlob);
-const img = new Image();
-img.onload = () => { // TODO: need to block on this before drawing mask canvas onto main
-    mctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url); // Clean up
-};
-img.src = url;
-                
                 if (opt === "box") {
                     ctx.strokeStyle = "fuchsia";
                     ctx.strokeRect(x, y, w, h);
                 } else if (opt === "mask") {
-                    ctx.drawImage(maskCanvas, x, y);
+                    ctx.drawImage(maskCanvas, 0, 0);
                 }
                 
                 if (opt !== "hide") {
@@ -424,10 +387,14 @@ img.src = url;
 
             // Adjust canvas for high-DPI displays (untested, I don't have one)
             //
+            /*
             const scale = window.devicePixelRatio;
             canvas.width = canvas.clientWidth * scale;
             canvas.height = canvas.clientHeight * scale;
             ctx.scale(scale, scale);
+            */
+
+            createMask();
 
             window.addEventListener("hashchange", populateFromHash);
             document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
@@ -443,6 +410,40 @@ img.src = url;
                 el.addEventListener("mouseout", update);
             }
         })();
+
+        function createMask() {
+            const svg = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="500" height="100" viewBox="0 0 500 100" preserveAspectRatio="none">
+                <defs>
+                    <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
+                    <feComponentTransfer in="SourceAlpha" result="alpha">
+                        <feFuncA type="discrete" tableValues="0 1"/>
+                    </feComponentTransfer>
+                    <feMorphology in="alpha" operator="dilate" radius="2" result="dilated"/>
+                    <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
+                    <feFlood flood-color="fuchsia" result="flood"/>
+                    <feComposite in="flood" in2="border" operator="in"/>
+                    </filter>
+                </defs>
+                <text x="${pos.x}" y="${pos.y}"
+                        dominant-baseline="alphabetic"
+                        text-anchor="start"
+                        font-family="sans-serif"
+                        font-size="${fontSize}px"
+                        line-height="1"
+                        filter="url(#dilate)"
+                        fill="black">${text}</text>
+                </svg>`;
+            const blob = new Blob([svg], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const img = new Image(500, 100);
+            img.onload = () => {
+                const mctx = maskCanvas.getContext("2d");
+                mctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        }
     </script>
 </body>
 
