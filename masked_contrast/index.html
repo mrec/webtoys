@@ -191,8 +191,10 @@
                     ctx.fillText(text, pos.x, pos.y);
                 }
 
-                calculateImageBasedContrast(scheme.fg, pixels.data);
-            } else {
+                if (!opt) { // avoid weird stats jitter on overlay updates
+                    calculateImageBasedContrast(scheme.fg, pixels.data);
+                }
+            } else { // DOM drawing
 
                 elements.domDiv.style.backgroundColor = scheme.bg;
                 elements.domText.style.font = fontSize + "px sans-serif";
