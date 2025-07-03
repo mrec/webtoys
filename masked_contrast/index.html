@@ -11,17 +11,17 @@
     <link rel="icon" href="data:,">
     <style>
         html, body, main, canvas, p, fieldset, pre { margin: 0; padding: 0; }
-        main { max-width: 50em; margin: 2em auto; font: 10pt sans-serif; background-color: white; }
-        #gfx, fieldset { width: 502px; border: 1px solid black; box-sizing: border-box; }
+        main { width: 302px; margin: 2em auto; font: 10pt sans-serif; background-color: white; }
+        #gfx, fieldset { width: 302px; border: 1px solid black; box-sizing: border-box; }
         #gfx { position: relative; }
-        #canvas, #dom-div { width: 500px; height: 100px; position: relative; overflow: clip; }
+        #canvas, #dom-div { width: 300px; height: 100px; position: relative; overflow: clip; }
         #dom-text { position: absolute; line-height: 1; transform: translateY(-0.92em) /* approx baseline offset from top */; }
 
         fieldset { margin-top: 8px; padding: 8px; }
         fieldset label { display: block; padding: 4px 0; }
         fieldset label > * { display: inline-block; }
-        fieldset label span { width: 150px; }
-        fieldset select { width: 320px; }
+        fieldset label span { width: 110px; }
+        fieldset select { width: 160px; }
 
         fieldset#image-based pre { margin-top: 1em; }
         fieldset#image-based span { display: inline-block; width: 3em; }
@@ -32,7 +32,7 @@
     <main>
         <noscript>This webtoy uses JavaScript and won't work without it</noscript>
         <div id="gfx">
-            <canvas id="canvas" width="500" height="100" aria-label="text drawn on a non-contrasting background">
+            <canvas id="canvas" width="300" height="100" aria-label="text drawn on a non-contrasting background">
                 Your browser does not support the &lt;canvas> element
             </canvas>
             <div id="dom-div">
@@ -42,27 +42,28 @@
         <fieldset>
             <legend>Demo configuration</legend>
             <label>
-                <span>Draw using</span>
+                <span>Draw method</span>
                 <select id="renderer" disabled>
-                    <option value="d">DOM text on a &lt;div> with a background-image</option>
-                    <option value="c">Canvas calls for both text and background</option>
+                    <option value="d">DOM</option>
+                    <option value="c">Canvas</option>
                 </select>
             </label>
             <label>
-                <span>Contrast enhancement</span>
+                <span>Shadow strength</span>
                 <select id="enhance" disabled>
                     <option value="0">None</option>
-                    <option value="1">Weak text-shadow</option>
-                    <option value="2">Medium text-shadow</option>
-                    <option value="4" selected>Strong text-shadow</option>
+                    <option value="1">Weak (x1)</option>
+                    <option value="2">Medium (x2)</option>
+                    <option value="4" selected>Strong (x4)</option>
                 </select>
             </label>
             <label>
                 <span>Colour scheme</span>
                 <select id="scheme" disabled>
-                    <option value="e">Enhanced (white fill, pale bg, black shadow)</option>
+                    <option value="v">Vanilla</option>
+                    <option value="e" selected>Needs enhancing</option>
                     <option value="g">Garish</option>
-                    <option value="x">Stupid (white fill, bg, shadow)</option>
+                    <option value="x">Stupid (all-white)</option>
                 </select>
             </label>
             <label>
@@ -75,7 +76,7 @@
                 </select>
             </label>
             <label>
-                <span>Shadow blur radius</span>
+                <span>Blur radius</span>
                 <select id="radius" disabled>
                     <option value="n">None</option>
                     <option value="t">Tiny</option>
@@ -110,7 +111,7 @@
         };
 
         const text = "Hello, world!";
-        const pos = { x: 200, y: 64 };
+        const pos = { x: 24, y: 64 };
         const fontSize = 48;
         const maskWidth = 2;
         const ctx = $("#canvas").getContext("2d");
@@ -128,6 +129,7 @@
 
         const defaultHash = Array.from($$("select")).map(e => e.value).join("");
         const schemes = { // don't use named colours here, it complicates parsing
+            v: { fg: "#000", bg: "#fff", ss: "#000" },
             e: { fg: "#eee", bg: "#def", ss: "#000" },
             g: { fg: "#fd8", bg: "#8df", ss: "#dfd" },
             x: { fg: "#fff", bg: "#fff", ss: "#fff" },
@@ -141,7 +143,7 @@
             x: { d: 35, c: 38 },
         };
 
-        const maskCanvas = new OffscreenCanvas(500, 100);
+        const maskCanvas = new OffscreenCanvas(300, 100);
         var maskBytes; // initialized asynchronously by init()
 
         init();
@@ -163,7 +165,7 @@
             //
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
-                ctx.fillRect(0, 0, 500, 100);
+                ctx.fillRect(0, 0, 300, 100);
 
                 if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
@@ -222,14 +224,14 @@
 
             const bg = $("#dom-div").style.backgroundColor;
             const bgLum = luminance(numbers(bg));
-            lines.push(`background colour: ${bg}\n  luminance: ${bgLum}`);
+            lines.push(`background colour: ${bg}\n  luminance: ${bgLum.toFixed(2)}`);
 
             const style = $("#dom-text").style;
             const fg = style.color;
             const fgLum = luminance(numbers(fg));
             const baseContrast = contrast(bgLum, fgLum);
-            lines.push(`text colour: ${fg}\n  luminance: ${fgLum}`);
-            lines.push(`text/background contrast: ${baseContrast}`)
+            lines.push(`text colour: ${fg}\n  luminance: ${fgLum.toFixed(2)}`);
+            lines.push(`text/background contrast: ${baseContrast.toFixed(2)}`)
             
             if (style.textShadow !== "none") {
                 const shadows = [...style.textShadow.match(/rgb.*?px(?=,|$)/g)];
@@ -292,13 +294,20 @@
                 const idealContrast = contrast(fgLum, shadowedBgLum);
                 const finalContrast = idealContrast * combinedExposure + baseContrast * (1 - combinedExposure);
 
-                lines.push(`shadow: ${shadow}\n  stack: ${stack}\n  base luminance: ${shadowLum}`);
-                lines.push(`  dilutedAlpha (per shadow): ${dilutedAlpha}`);
-                lines.push(`  exposure:\n    offset: ${offsetExposure}\n    blur: ${blurExposure}\n    combined: ${combinedExposure}`);
-                lines.push(`  bgShineThrough: ${bgShineThrough}`);
-                lines.push(`  shadowed background luminance: ${shadowedBgLum}`);
-                lines.push(`  ideal shadow contrast: ${idealContrast}`);
-                lines.push(`<b>final contrast: ${finalContrast}</b>`);
+                lines.push(
+                    `shadow: ${shadow}`,
+                    `  stack: x${stack}`,
+                    `  base luminance: ${shadowLum.toFixed(2)}`,
+                    `  exposure:`,
+                    `    offset: ${offsetExposure.toFixed(2)}`,
+                    `    blur: ${blurExposure.toFixed(2)}`,
+                    `    combined: ${combinedExposure.toFixed(2)}`,
+                    `  dilutedAlpha (per shadow): ${dilutedAlpha.toFixed(2)}`,
+                    `  dilutedAlpha (cumulative): ${(1 - bgShineThrough).toFixed(2)}`,
+                    `  shadowed background luminance: ${shadowedBgLum.toFixed(2)}`,
+                    `  ideal shadow contrast: ${idealContrast.toFixed(2)}`,
+                    `<b>final exposure-adjusted contrast: ${finalContrast.toFixed(2)}</b>`
+                );
             }
 
             $("#analytic pre").innerHTML = lines.join("\n");
@@ -475,7 +484,7 @@
 
             function makeSvgImgPromise() {
                 const svg = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="500" height="100" viewBox="0 0 500 100" preserveAspectRatio="none">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100" preserveAspectRatio="none">
                     <defs>
                         <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
                             <feComponentTransfer in="SourceAlpha" result="alpha">
