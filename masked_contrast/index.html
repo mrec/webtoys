@@ -518,8 +518,11 @@
 
             function setUpButton(el, opt) {
                 el.addEventListener("mousedown", e => update(e, opt));
+                el.addEventListener("touchstart", e => update(e, opt));
                 el.addEventListener("mouseup", update);
                 el.addEventListener("mouseout", update);
+                el.addEventListener("touchend", update);
+                el.addEventListener("touchcancel", update);
             }
         }
     </script>
