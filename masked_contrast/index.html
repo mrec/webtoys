@@ -394,7 +394,8 @@
                 ].join("\n");
 
             function swatch(rgb) {
-                return `<span style="background-color:rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})">&nbsp;</span>`;
+                const color = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+                return `<span style="background-color:${color}" title="${color}">&nbsp;</span>`;
             }
         }
 
