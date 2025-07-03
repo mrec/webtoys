@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="author" content="Mike Capp">
+        <meta name="description" content="General information about the webtoys repo">
+        <title>webtoys home</title>
+        <link rel="icon" href="data:,">
+        <style>
+            body { max-width: 50em; margin:2em auto; line-height: 1.5; font-family: Segoe UI, sans-serif; }
+        </style>
+    </head>
+    <body>
+        <p>This repo contains various small web-based apps, experiments, bug demos and the like. There's no overarching theme, it's just somewhere to put them. Anything that might be interesting will be linked from somewhere else, e.g. a blog post, so there's no catalogue listing here as yet.</p>
+        <p>I'm quite fond of the hashbang pattern for this sort of thing: reflecting persistent page state in a URL fragment so that it'll survive reload and can be captured in simple hyperlinks, and populating from that fragment at load. I'm aware of the criticisms levelled against the pattern, but I don't think they apply here. The pages that use it are fundamentally reliant on JavaScript, and the state isn't something that'd belong in referrer headers even if anyone still sent referrer headers.</p>
+        <p>Everything is dual-licensed under MIT and Apache-2.0 unless explicitly stated otherwise.</p>
+    </body>
+</html>
