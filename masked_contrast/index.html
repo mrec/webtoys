@@ -24,7 +24,7 @@
         fieldset select { width: 320px; }
 
         fieldset#image-based pre { margin-top: 1em; }
-        fieldset#image-based span { display: inline-block; border: 1px solid black; width: 2em; margin-right: 8px; box-sizing: border-box; }
+        fieldset#image-based span { display: inline-block; width: 3em; }
     </style>
 </head>
 
@@ -167,7 +167,7 @@
 
                 if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
-                    ctx.shadowColor = scheme.ss;
+                    ctx.shadowColor = ctx.fillStyle = scheme.ss;
                     ctx.shadowBlur = radius.c;
                     ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
                     ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
@@ -209,7 +209,7 @@
 
             // Update the location hash to reflect current settings, allowing bookmarking and nondestructive reload
             //
-            history.replaceState(undefined, undefined, "#" + Array.from($$("select")).map(e => e.value).join(""));
+            history.replaceState(undefined, undefined, "#!" + Array.from($$("select")).map(e => e.value).join(""));
 
             $("#offset").disabled = (enhance == 0);
             $("#radius").disabled = (enhance == 0);
@@ -364,8 +364,7 @@
                 }
             }
 
-            const lines = [];
-            lines.push(
+            $("#image-based pre").innerHTML = [
                 "Whole box:",
                 `  ${swatch(rgbBest)} best contrast: ${cBest.toFixed(3)}`,
                 `  ${swatch(rgbWorst)} worst contrast: ${cWorst.toFixed(3)}`,
@@ -380,8 +379,7 @@
                 `  WCAG 3.0 pixel pass rate: ${((maskedLargeCount / inMaskCount) * 100).toFixed(2)}%`,
                 `  mean luminance: ${(lumMaskedSum / inMaskCount).toFixed(2)}`,
                 `  mean contrast: ${(cMaskedSum / inMaskCount).toFixed(2)}`,
-            );
-            $("#image-based pre").innerHTML = lines.join("\n");
+                ].join("\n");
 
             function swatch(rgb) {
                 return `<span style="background-color:rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})">&nbsp;</span>`;
@@ -421,8 +419,8 @@
             return (lighter + 0.05) / (darker + 0.05); // avoid possible divide by zero
         }
 
-        function populateFromHash() {
-            var h = location.hash.replace("#", "").substr(0, defaultHash.length);
+        function populateFromHashBang() {
+            var h = location.hash.replace("#!", "").substr(0, defaultHash.length);
             h += defaultHash.substr(h.length);
 
             Array.from($$("select")).forEach(validatedSet);
@@ -462,7 +460,7 @@
                     maskBytes[i] = maskPixels[i * 4 + 3]; // just take alpha as a boolean equivalent
                 }
 
-                window.addEventListener("hashchange", populateFromHash);
+                window.addEventListener("hashchange", populateFromHashBang);
                 document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
                 setUpButton($("button#hide-text"), "hide");
                 setUpButton($("button#show-box"), "box");
@@ -470,7 +468,7 @@
 
                 $$("select, button").forEach(el => el.disabled = false);
 
-                populateFromHash();
+                populateFromHashBang();
             });
 
             function makeSvgImgPromise() {
