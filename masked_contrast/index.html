@@ -83,6 +83,7 @@
                     <option value="t">Tiny</option>
                     <option value="s">Small</option>
                     <option value="r" selected>Reasonable</option>
+                    <option value="o">Excessive</option>
                     <option value="x">Extreme</option>
                 </select>
             </label>
@@ -141,11 +142,17 @@
             t: { d: 1, c: 1 },
             s: { d: 2, c: 2 },
             r: { d: 7, c: 6 },
+            o: { d: 10, c: 9 },
             x: { d: 35, c: 38 },
         };
 
-        const maskCanvas = new OffscreenCanvas(300, 100);
-        var maskBytes; // initialized asynchronously by init()
+        const maskCanvas = (function() {
+            const c = document.createElement("canvas"); // OffscreenCanvas isn't as well supported
+            c.width = 300; 
+            c.height = 100;
+            return c;
+        })();
+        var maskBytes; // initialized asynchronously by init(), may be undefined if filter unsupported
 
         init();
 
@@ -194,7 +201,7 @@
                     ctx.fillText(text, pos.x, pos.y);
                 }
 
-                if (!opt) { // avoid weird stats jitter on overlay updates
+                if (maskBytes && !opt) { // avoid weird stats jitter on overlay updates
                     calculateImageBasedContrast(scheme.fg, pixels.data);
                 }
             } else { // DOM drawing
@@ -454,33 +461,38 @@
 
         /** One-time initialization */
         function init() {
-
-            // Adjust canvas for high-DPI displays (untested, I don't have one)
-            //
-            /*
-            const scale = window.devicePixelRatio;
-            canvas.width = canvas.clientWidth * scale;
-            canvas.height = canvas.clientHeight * scale;
-            ctx.scale(scale, scale);
-            */
-
             makeSvgImgPromise().then(img => {
                 const mctx = maskCanvas.getContext("2d");
-                mctx.drawImage(img, 0, 0);
-                const maskPixels = mctx.getImageData(box.x, box.y, box.w, box.h).data;
-                maskBytes = new Uint8ClampedArray(maskPixels.length / 4);
-                for (let i = 0; i < maskBytes.length; ++i) {
-                    maskBytes[i] = maskPixels[i * 4 + 3]; // just take alpha as a boolean equivalent
+
+                // Test for filter support, because Safari lies
+                //
+                mctx.fillStyle = "red";
+                mctx.filter = "grayscale(100%)";
+                mctx.fillRect(0, 0, 2, 2);
+                const topLeftPixel = mctx.getImageData(0, 0, 1, 1).data;
+                mctx.clearRect(0, 0, 2, 2);
+                mctx.filter = "none";
+                
+                if (topLeftPixel[0] === topLeftPixel[1]) { // filter is working
+                    mctx.drawImage(img, 0, 0);
+                    const maskPixels = mctx.getImageData(box.x, box.y, box.w, box.h).data;
+                    maskBytes = new Uint8ClampedArray(maskPixels.length / 4);
+                    for (let i = 0; i < maskBytes.length; ++i) {
+                        maskBytes[i] = maskPixels[i * 4 + 3]; // just take alpha as a boolean equivalent
+                    }
+
+                    setUpButton($("button#hide-text"), "hide");
+                    setUpButton($("button#show-box"), "box");
+                    setUpButton($("button#show-mask"), "mask");
+                    $$("button").forEach(el => el.disabled = false);
+                } else {
+                    $("#image-based").textContent = "ERROR: CanvasRenderingContext2D.filter not supported, probably because Safari";
+                    $("#image-based").style.color = "red";
                 }
 
                 window.addEventListener("hashchange", populateFromHashBang);
                 document.querySelectorAll("select").forEach(el => el.addEventListener("change", update));
-                setUpButton($("button#hide-text"), "hide");
-                setUpButton($("button#show-box"), "box");
-                setUpButton($("button#show-mask"), "mask");
-
-                $$("select, button").forEach(el => el.disabled = false);
-
+                $$("select").forEach(el => el.disabled = false);
                 populateFromHashBang();
             });
 
