@@ -23,6 +23,7 @@
         fieldset label > * { display: inline-block; }
         fieldset label span { width: 110px; }
         fieldset select { width: 160px; }
+        button { width: 68px; }
 
         fieldset#image-based pre { margin-top: 1em; }
         fieldset#image-based span { display: inline-block; width: 3em; }
@@ -89,14 +90,15 @@
             </label>
         </fieldset>
         <fieldset id="analytic">
-            <legend>Analytic contrast</legend>
+            <legend>Analytic contrast (DOM)</legend>
             <pre></pre>
         </fieldset>
         <fieldset id="image-based">
-            <legend>Image-based contrast</legend>
-            <button type="button" disabled id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide Text</button>
-            <button type="button" disabled id="show-box" title="Show the pixel box we'll consider as background">Show Box</button>
-            <button type="button" disabled id="show-mask" title="Show the dilation mask">Show Mask</button>
+            <legend>Image-based contrast (Canvas)</legend>
+            <button type="button" disabled id="hide-text" title="Show the background without text, as the contrast checker will see it">Hide</button>
+            <button type="button" disabled id="show-box" title="Show the outline of the pixel box we'll consider as background">Box</button>
+            <button type="button" disabled id="show-mask" title="Show the dilation outline mask">Mask</button>
+            <button type="button" disabled id="show-heat" title="Show mask contrast heatmap">Heat</button>
             <pre></pre>
         </fieldset>
     </main>
@@ -122,10 +124,10 @@
         const box = (function() {
             const metrics = window.metrics = ctx.measureText(text);
             return {
-                x: Math.round(pos.x - metrics.actualBoundingBoxLeft) - maskWidth,
-                y: Math.round(pos.y - metrics.actualBoundingBoxAscent) - maskWidth,
-                w: Math.round(metrics.width) + maskWidth * 2,
-                h: Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + maskWidth * 2
+                x: Math.round(pos.x - metrics.actualBoundingBoxLeft) - maskWidth - 1,
+                y: Math.round(pos.y - metrics.actualBoundingBoxAscent) - maskWidth - 1,
+                w: Math.round(metrics.width) + maskWidth * 2 + 2,
+                h: Math.round(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + maskWidth * 2 + 2
             };
         })();
 
@@ -153,6 +155,7 @@
             return c;
         })();
         var maskBytes; // initialized asynchronously by init(), may be undefined if filter unsupported
+        var heatMap = new ImageData(box.w, box.h);
 
         init();
 
@@ -194,15 +197,19 @@
                     ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w, box.h);
                 } else if (opt === "mask") {
                     ctx.drawImage(maskCanvas, 0, 0);
+                } else if (opt === "heat") {
+                    ctx.fillStyle = "black";
+                    ctx.fillRect(0, 0, 300, 100);
+                    ctx.putImageData(heatMap, box.x, box.y);
                 }
                 
-                if (opt !== "hide") {
+                if (opt !== "hide" && opt != "heat") {
                     ctx.fillStyle = scheme.fg;
                     ctx.fillText(text, pos.x, pos.y);
                 }
 
                 if (maskBytes && !opt) { // avoid weird stats jitter on overlay updates
-                    calculateImageBasedContrast(scheme.fg, pixels.data);
+                    calculateImageBasedContrast(scheme.fg, pixels.data, heatMap.data);
                 }
             } else { // DOM drawing
 
@@ -332,8 +339,12 @@
             }
         }
 
-        function calculateImageBasedContrast(fgColor, pixelData) {
+        function calculateImageBasedContrast(fgColor, pixelData, heatData) {
             const fgLum = luminance(hexColor(fgColor));
+            const HEAT_RED = new Uint8ClampedArray([255, 0, 0, 255]);
+            const HEAT_YELLOW = new Uint8ClampedArray([255, 255, 0, 255]);
+            const HEAT_GREEN = new Uint8ClampedArray([0, 255, 0, 255]);
+            const HEAT_NONE = new Uint8ClampedArray([0, 0, 0, 255]);
             let cBest = 1, cMaskedBest = 1, cWorst = 21, cMaskedWorst = 21;
             let rgbBest = [], rgbMaskedBest = [], rgbWorst = [], rgbMaskedWorst = [];
             let boxCount = pixelData.length / 4, inMaskCount = 0;
@@ -349,12 +360,23 @@
                 let pass = (c >= 4.5);
                 let largePass = (c > 3);
 
+                // Masked outline stats and heatmap
+                //
                 if (inMask) {
                     ++inMaskCount;
                     lumMaskedSum += bgLum;
                     cMaskedSum += c;
-                    if (pass) ++maskedPassCount;
-                    if (largePass) ++maskedLargeCount;
+                    if (pass) {
+                        ++maskedPassCount;
+                        ++maskedLargeCount;
+                        heatData.set(HEAT_GREEN, i);
+                    } else if (largePass) {
+                        ++maskedLargeCount;
+                        heatData.set(HEAT_YELLOW, i);
+                    } else {
+                        heatData.set(HEAT_RED, i);
+                    }
+
                     if (c > cMaskedBest) {
                         cMaskedBest = c;
                         rgbMaskedBest = rgb;
@@ -363,8 +385,12 @@
                         cMaskedWorst = c;
                         rgbMaskedWorst = rgb;
                     }
+                } else {
+                    heatData.set(HEAT_NONE, i);
                 }
 
+                // Whole-box stats
+                //
                 if (pass) ++passCount;
                 if (largePass) ++largeCount;
                 lumBoxSum += bgLum;
@@ -472,7 +498,7 @@
                 const topLeftPixel = mctx.getImageData(0, 0, 1, 1).data;
                 mctx.clearRect(0, 0, 2, 2);
                 mctx.filter = "none";
-                
+
                 if (topLeftPixel[0] === topLeftPixel[1]) { // filter is working
                     mctx.drawImage(img, 0, 0);
                     const maskPixels = mctx.getImageData(box.x, box.y, box.w, box.h).data;
@@ -484,6 +510,7 @@
                     setUpButton($("button#hide-text"), "hide");
                     setUpButton($("button#show-box"), "box");
                     setUpButton($("button#show-mask"), "mask");
+                    setUpButton($("button#show-heat"), "heat");
                     $$("button").forEach(el => el.disabled = false);
                 } else {
                     $("#image-based").textContent = "ERROR: CanvasRenderingContext2D.filter not supported, probably because Safari";
