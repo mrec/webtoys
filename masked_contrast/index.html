@@ -88,6 +88,14 @@
                     <option value="x">Extreme</option>
                 </select>
             </label>
+            <label>
+                <span>Bg image</span>
+                <select id="bgimage" disabled>
+                    <option value="n" selected>None</option>
+                    <option value="f">Fine checkerboard</option>
+                    <option value="c">Coarse checkerboard</option>
+                </select>
+            </label>
         </fieldset>
         <fieldset id="analytic">
             <legend>Analytic contrast (DOM)</legend>
@@ -154,9 +162,11 @@
             c.height = 100;
             return c;
         })();
-        var maskBytes; // initialized asynchronously by init(), may be undefined if filter unsupported
-        var heatMap = new ImageData(box.w, box.h);
 
+        var maskBytes; // initialized asynchronously by init(), may be undefined if filter unsupported
+        var checkerboardImage;  // ditto
+        var heatMap = new ImageData(box.w, box.h);
+        
         init();
 
         /** Called to repaint the world whenever anything changes; we're not getting incrementally fancy here */
@@ -171,59 +181,69 @@
             const scheme = schemes[$("#scheme").value];
             const offset = offsets[$("#offset").value];
             const radius = radii[$("#radius").value];
+            const bgimage = $("#bgimage").value;
             
             // Redraw ALL the things!
             //
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
-                    ctx.fillRect(0, 0, 300, 100);
+                ctx.fillRect(0, 0, 300, 100);
 
-                    if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
-                        const MULTIPASS_FRINGING_HACK = 1000;
-                        ctx.shadowColor = ctx.fillStyle = scheme.ss;
-                        ctx.shadowBlur = radius.c;
-                        ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
-                        ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
-                        for (let i = 0; i < enhance; ++i) {
-                            ctx.fillText(text, pos.x, pos.y - MULTIPASS_FRINGING_HACK);
-                        }
-                        ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
+                if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
+                    const MULTIPASS_FRINGING_HACK = 1000;
+                    ctx.shadowColor = ctx.fillStyle = scheme.ss;
+                    ctx.shadowBlur = radius.c;
+                    ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
+                    ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
+                    for (let i = 0; i < enhance; ++i) {
+                        ctx.fillText(text, pos.x, pos.y - MULTIPASS_FRINGING_HACK);
                     }
+                    ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
+                }
 
-                        const pixels = ctx.getImageData(box.x, box.y, box.w, box.h); // before any overlays
+                const pixels = ctx.getImageData(box.x, box.y, box.w, box.h); // before any overlays
 
-                        if (opt === "box") {
-                            ctx.strokeStyle = "fuchsia";
-                            ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w, box.h);
-                        } else if (opt === "mask") {
-                            ctx.drawImage(maskCanvas, 0, 0);
-                        } else if (opt === "heat") {
-                            ctx.fillStyle = "black";
-                            ctx.fillRect(0, 0, 300, 100);
-                            ctx.putImageData(heatMap, box.x, box.y);
-                        }
-                        
-                        if (opt !== "hide" && opt != "heat") {
-                            ctx.fillStyle = scheme.fg;
-                            ctx.fillText(text, pos.x, pos.y);
-                        }
+                if (opt === "box") {
+                    ctx.strokeStyle = "fuchsia";
+                    ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w, box.h);
+                } else if (opt === "mask") {
+                    ctx.drawImage(maskCanvas, 0, 0);
+                } else if (opt === "heat") {
+                    ctx.fillStyle = "black";
+                    ctx.fillRect(0, 0, 300, 100);
+                    ctx.putImageData(heatMap, box.x, box.y);
+                }
+                
+                if (opt !== "hide" && opt != "heat") {
+                    ctx.fillStyle = scheme.fg;
+                    ctx.fillText(text, pos.x, pos.y);
+                }
 
-                        if (maskBytes && !opt) { // avoid weird stats jitter on overlay updates
-                            calculateImageBasedContrast(scheme.fg, pixels.data, heatMap.data);
-                        }
+                if (maskBytes && !opt) { // avoid weird stats jitter on overlay updates
+                    calculateImageBasedContrast(scheme.fg, pixels.data, heatMap.data);
+                }
             } else { // DOM drawing
+                let dds = elements.domDiv.style;
+                dds.backgroundColor = scheme.bg;
+                dds.backgroundImage = (bgimage === "n" ? "none" : `url("${checkerboardImage.src}")`);
+                dds.backgroundSize = (bgimage === "c" ? "100px" : "auto");
+                dds.imageRendering = "pixelated";
 
-                elements.domDiv.style.backgroundColor = scheme.bg;
-                elements.domText.style.font = fontSize + "px sans-serif";
-                elements.domText.style.color = scheme.fg;
-                elements.domText.style.textShadow = (enhance > 0) 
+                let dts = elements.domText.style;
+                dts.font = fontSize + "px sans-serif";
+                dts.color = scheme.fg;
+                dts.textShadow = (enhance > 0) 
                     ? Array(enhance).fill(`${offset}px ${offset}px ${radius.d}px ${scheme.ss}`).join(", ")
                     : "none";
-                elements.domText.style.left = pos.x + "px";
-                elements.domText.style.top = pos.y + "px";
+                dts.left = pos.x + "px";
+                dts.top = pos.y + "px";
                 elements.domText.textContent = text;
 
-                calculateAnalyticContrast();
+                if (bgimage === "n") {
+                    calculateAnalyticContrast();
+                } else {
+                    $("#analytic pre").textContent = "Not supported with background-image";
+                }
             }
 
             // Update the location hash to reflect current settings, allowing bookmarking and nondestructive reload
@@ -353,7 +373,7 @@
             let lumBoxSum = 0, cBoxSum = 0, lumMaskedSum = 0, cMaskedSum = 0;
             for (let i = 0; i < pixelData.length; i += 4) {
                 let inMask = maskBytes[i / 4] === 255;
-
+                
                 let rgb = [pixelData[i], pixelData[i + 1], pixelData[i + 2]];
                 let bgLum = luminance(rgb);
                 let c = contrast(fgLum, bgLum);
@@ -465,6 +485,7 @@
             return (lighter + 0.05) / (darker + 0.05); // avoid possible divide by zero
         }
 
+        /** Set all select widgets and draw the page */
         function populateFromHashBang() {
             var h = location.hash.replace("#!", "").substr(0, defaultHash.length);
             h += defaultHash.substr(h.length);
@@ -487,20 +508,37 @@
 
         /** One-time initialization */
         function init() {
-            makeSvgImgPromise().then(img => {
+            const checkerboardDataURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAADElEQVQI12Ng+A+EAAYAAf9C8vvWAAAAAElFTkSuQmCC";
+            const svg = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100" preserveAspectRatio="none">
+                <defs>
+                    <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
+                        <feComponentTransfer in="SourceAlpha" result="alpha">
+                            <feFuncA type="discrete" tableValues="0 1"/>
+                        </feComponentTransfer>
+                        <feMorphology in="alpha" operator="dilate" radius="${maskWidth}" result="dilated"/>
+                        <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
+                        <feFlood flood-color="fuchsia" result="flood"/>
+                        <feComposite in="flood" in2="border" operator="in"/>
+                    </filter>
+                </defs>
+                <text x="${pos.x}" y="${pos.y}"
+                    dominant-baseline="alphabetic"
+                    text-anchor="start"
+                    font-family="sans-serif"
+                    font-size="${fontSize}px"
+                    line-height="1"
+                    filter="url(#dilate)"
+                    fill="black">${text}</text>
+                </svg>`;
+            Promise.all([
+                imagePromise(checkerboardDataURI),
+                imagePromise(URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })))
+            ]).then(([cbImg, svgImg]) => {
+                checkerboardImage = cbImg;
                 const mctx = maskCanvas.getContext("2d");
-
-                // Test for filter support, because Safari lies
-                //
-                mctx.fillStyle = "red";
-                mctx.filter = "grayscale(100%)";
-                mctx.fillRect(0, 0, 2, 2);
-                const topLeftPixel = mctx.getImageData(0, 0, 1, 1).data;
-                mctx.clearRect(0, 0, 2, 2);
-                mctx.filter = "none";
-
-                if (topLeftPixel[0] === topLeftPixel[1]) { // filter is working
-                    mctx.drawImage(img, 0, 0);
+                if (isFilterSupported(mctx)) {
+                    mctx.drawImage(svgImg, 0, 0);
                     const maskPixels = mctx.getImageData(box.x, box.y, box.w, box.h).data;
                     maskBytes = new Uint8ClampedArray(maskPixels.length / 4);
                     for (let i = 0; i < maskBytes.length; ++i) {
@@ -523,37 +561,26 @@
                 populateFromHashBang();
             });
 
-            function makeSvgImgPromise() {
-                const svg = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100" preserveAspectRatio="none">
-                    <defs>
-                        <filter id="dilate" x="-10%" y="-10%" width="120%" height="120%">
-                            <feComponentTransfer in="SourceAlpha" result="alpha">
-                                <feFuncA type="discrete" tableValues="0 1"/>
-                            </feComponentTransfer>
-                            <feMorphology in="alpha" operator="dilate" radius="${maskWidth}" result="dilated"/>
-                            <feComposite in="dilated" in2="alpha" operator="out" result="border"/>
-                            <feFlood flood-color="fuchsia" result="flood"/>
-                            <feComposite in="flood" in2="border" operator="in"/>
-                        </filter>
-                    </defs>
-                    <text x="${pos.x}" y="${pos.y}"
-                        dominant-baseline="alphabetic"
-                        text-anchor="start"
-                        font-family="sans-serif"
-                        font-size="${fontSize}px"
-                        line-height="1"
-                        filter="url(#dilate)"
-                        fill="black">${text}</text>
-                    </svg>`;
-                const blob = new Blob([svg], { type: "image/svg+xml" });
-                const url = URL.createObjectURL(blob);
+            function imagePromise(url) {
                 const img = new Image();
                 return new Promise((resolve, reject) => {
                     img.onload = () => resolve(img);
                     img.onerror = reject;
                     img.src = url;
                 });
+            }
+
+            /** Test for filter support, because Safari lies */
+            function isFilterSupported(mctx) {
+                mctx.save();
+                mctx.fillStyle = "red";
+                mctx.filter = "grayscale(100%)";
+                mctx.fillRect(0, 0, 2, 2);
+                const topLeftPixel = mctx.getImageData(0, 0, 1, 1).data;
+                mctx.clearRect(0, 0, 2, 2);
+                mctx.restore();
+                
+                return (topLeftPixel[0] === topLeftPixel[1])
             }
 
             function setUpButton(el, opt) {
