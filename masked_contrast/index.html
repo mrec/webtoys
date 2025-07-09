@@ -176,41 +176,41 @@
             //
             if (useCanvas) {
                 ctx.fillStyle = scheme.bg;
-                ctx.fillRect(0, 0, 300, 100);
-
-                if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
-                    const MULTIPASS_FRINGING_HACK = 1000;
-                    ctx.shadowColor = ctx.fillStyle = scheme.ss;
-                    ctx.shadowBlur = radius.c;
-                    ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
-                    ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
-                    for (let i = 0; i < enhance; ++i) {
-                        ctx.fillText(text, pos.x, pos.y - MULTIPASS_FRINGING_HACK);
-                    }
-                    ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
-                }
-
-                const pixels = ctx.getImageData(box.x, box.y, box.w, box.h); // before any overlays
-
-                if (opt === "box") {
-                    ctx.strokeStyle = "fuchsia";
-                    ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w, box.h);
-                } else if (opt === "mask") {
-                    ctx.drawImage(maskCanvas, 0, 0);
-                } else if (opt === "heat") {
-                    ctx.fillStyle = "black";
                     ctx.fillRect(0, 0, 300, 100);
-                    ctx.putImageData(heatMap, box.x, box.y);
-                }
-                
-                if (opt !== "hide" && opt != "heat") {
-                    ctx.fillStyle = scheme.fg;
-                    ctx.fillText(text, pos.x, pos.y);
-                }
 
-                if (maskBytes && !opt) { // avoid weird stats jitter on overlay updates
-                    calculateImageBasedContrast(scheme.fg, pixels.data, heatMap.data);
-                }
+                    if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
+                        const MULTIPASS_FRINGING_HACK = 1000;
+                        ctx.shadowColor = ctx.fillStyle = scheme.ss;
+                        ctx.shadowBlur = radius.c;
+                        ctx.shadowOffsetX = ctx.shadowOffsetY = offset;
+                        ctx.shadowOffsetY += MULTIPASS_FRINGING_HACK;
+                        for (let i = 0; i < enhance; ++i) {
+                            ctx.fillText(text, pos.x, pos.y - MULTIPASS_FRINGING_HACK);
+                        }
+                        ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
+                    }
+
+                        const pixels = ctx.getImageData(box.x, box.y, box.w, box.h); // before any overlays
+
+                        if (opt === "box") {
+                            ctx.strokeStyle = "fuchsia";
+                            ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w, box.h);
+                        } else if (opt === "mask") {
+                            ctx.drawImage(maskCanvas, 0, 0);
+                        } else if (opt === "heat") {
+                            ctx.fillStyle = "black";
+                            ctx.fillRect(0, 0, 300, 100);
+                            ctx.putImageData(heatMap, box.x, box.y);
+                        }
+                        
+                        if (opt !== "hide" && opt != "heat") {
+                            ctx.fillStyle = scheme.fg;
+                            ctx.fillText(text, pos.x, pos.y);
+                        }
+
+                        if (maskBytes && !opt) { // avoid weird stats jitter on overlay updates
+                            calculateImageBasedContrast(scheme.fg, pixels.data, heatMap.data);
+                        }
             } else { // DOM drawing
 
                 elements.domDiv.style.backgroundColor = scheme.bg;
@@ -345,7 +345,7 @@
             const HEAT_YELLOW = new Uint8ClampedArray([255, 255, 0, 255]);
             const HEAT_GREEN = new Uint8ClampedArray([0, 255, 0, 255]);
             const HEAT_NONE = new Uint8ClampedArray([0, 0, 0, 255]);
-            let cBest = 1, cMaskedBest = 1, cWorst = 21, cMaskedWorst = 21;
+            let cBest = 0, cMaskedBest = 0, cWorst = 22, cMaskedWorst = 22; // deliberately out of range
             let rgbBest = [], rgbMaskedBest = [], rgbWorst = [], rgbMaskedWorst = [];
             let boxCount = pixelData.length / 4, inMaskCount = 0;
             let passCount = 0, maskedPassCount = 0; // contrast >= 4.5, WCAG general criterion
@@ -353,7 +353,7 @@
             let lumBoxSum = 0, cBoxSum = 0, lumMaskedSum = 0, cMaskedSum = 0;
             for (let i = 0; i < pixelData.length; i += 4) {
                 let inMask = maskBytes[i / 4] === 255;
-                
+
                 let rgb = [pixelData[i], pixelData[i + 1], pixelData[i + 2]];
                 let bgLum = luminance(rgb);
                 let c = contrast(fgLum, bgLum);
