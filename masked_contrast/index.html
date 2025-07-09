@@ -186,8 +186,18 @@
             // Redraw ALL the things!
             //
             if (useCanvas) {
-                ctx.fillStyle = scheme.bg;
+                ctx.save();
+                if (bgimage === "n") {
+                    ctx.fillStyle = scheme.bg;
+                } else {
+                    ctx.fillStyle = ctx.createPattern(checkerboardImage, "repeat");
+                    if (bgimage === "c") {
+                        ctx.scale(50, 50);
+                        ctx.imageSmoothingEnabled = false;
+                    }
+                }
                 ctx.fillRect(0, 0, 300, 100);
+                ctx.restore();
 
                 if (enhance > 0 && (offset || radius.c)) { // fringing hack shouldn't force shadows by itself
                     const MULTIPASS_FRINGING_HACK = 1000;
@@ -266,7 +276,7 @@
             const fgLum = luminance(numbers(fg));
             const baseContrast = contrast(bgLum, fgLum);
             lines.push(`text colour: ${fg}\n  luminance: ${fgLum.toFixed(2)}`);
-            lines.push(`text/background contrast: ${baseContrast.toFixed(2)}`)
+            lines.push(`text/background contrast: ${baseContrast.toFixed(2)}`);
             
             if (style.textShadow !== "none") {
                 const shadows = [...style.textShadow.match(/rgb.*?px(?=,|$)/g)];
@@ -415,13 +425,13 @@
                 if (largePass) ++largeCount;
                 lumBoxSum += bgLum;
                 cBoxSum += c;
-                if (c > cMaskedBest) {
+                if (c > cBest) {
                     if (c > cBest) {
                         cBest = c;
                         rgbBest = rgb;
                     }
                 }
-                if (c < cMaskedWorst) {
+                if (c < cWorst) {
                     if (c < cWorst) {
                         cWorst = c;
                         rgbWorst = rgb;
