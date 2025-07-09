@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8">
+        <title>Firefox canvas sync bug - minimal repro</title>
+        <link rel="icon" href="data:,">
+        <style>
+            html, body, canvas, pre { margin: 0; padding: 0; }
+            body { background-color: peachpuff; }
+            canvas, pre { display: block; width: 302px; border: 1px solid black; box-sizing: border-box; }
+            pre { background-color:white; padding: 8px; }
+            canvas, button, pre { margin:8px; }
+        </style>
+    </head>
+    <body>
+        <noscript>This page uses JavaScript and won't work without it</noscript>
+        <canvas id="canvas" width="300" height="100">
+            Your browser does not support the &lt;canvas> element
+        </canvas>
+        <button onclick="update()">Redraw</button>
+        <pre></pre>
+        <script>
+            const canvas = document.querySelector("canvas");
+            const pre = document.querySelector("pre");
+            const ctx = canvas.getContext("2d");
+
+            update();
+
+            function update() { // just forwards, to keep initial-load and redraw-button draws in step
+                updateSimple();
+            }
+
+            function updateSimple() { // never draws FG or BG on load, read pixel is transparent black or [254,254,254,229] (which is NOT the page BG)
+                drawBg();
+                drawFg();
+            }
+
+            function updateRaf() { // *usually* draws FG, never BG, read pixel *usually* black, exceptions seem to go together plus grey stripe
+                requestAnimationFrame(() => {
+                    drawBg();
+                    requestAnimationFrame(() => {
+                        drawFg();
+                    });
+                });
+            }
+
+            function updateSto() { // never draws BG, always draws FG, read pixel always black
+                setTimeout(() => {
+                    drawBg();
+                    setTimeout(() => {
+                        drawFg();
+                    }, 100);
+                }, 100);
+            }
+
+            function drawBg() {
+                ctx.clearRect(0, 0, 300, 100); // redundant, just seeing if it made a difference
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, 300, 100);
+            }
+
+            function drawFg() {
+                // Removing this read doesn't resolve the drawing issue
+                pre.textContent = "Top left bg pixel rgba: " + ctx.getImageData(0, 0, 1, 1).data.slice(0, 4);                
+
+                ctx.font = `normal 48px/1 sans-serif`;
+                ctx.textBaseline = "alphabetic";
+                ctx.fillStyle = "black";
+                ctx.fillText("Hello, world!", 20, 64);
+            }
+        </script>
+    </body>
+</html>
