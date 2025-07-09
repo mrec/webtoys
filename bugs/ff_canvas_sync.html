@@ -9,12 +9,13 @@
             body { background-color: peachpuff; }
             canvas, pre { display: block; width: 302px; border: 1px solid black; box-sizing: border-box; }
             pre { background-color:white; padding: 8px; }
-            canvas, button, pre { margin:8px; }
+            canvas, button, pre, a { margin:8px; }
         </style>
     </head>
     <body>
         <noscript>This page uses JavaScript and won't work without it</noscript>
-        <canvas id="canvas" width="300" height="100">
+        <p><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1976505">https://bugzilla.mozilla.org/show_bug.cgi?id=1976505</a></p>
+        <canvas width="300" height="100">
             Your browser does not support the &lt;canvas> element
         </canvas>
         <button onclick="update()">Redraw</button>
